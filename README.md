@@ -87,7 +87,7 @@ cd ../server
 npm install
 ```
 
-### 2. 配置 API-key（如需使用 AI 功能）
+### 2. 配置环境变量
 
 在后端 `server` 目录下创建 `.env` 文件：
 
@@ -96,13 +96,17 @@ cd server
 touch .env
 ```
 
-编辑 `.env` 文件，添加 MiniMax API-key：
+编辑 `.env` 文件，配置以下内容：
 
 ```
+# MiniMax API Key（如需使用 AI 功能）
+# 请访问 https://api.minimax.com 获取你的 API Key
 MINIMAX_API_KEY=your_api_key_here
-```
 
-> 如何获取 API-key？请参考 [MiniMax 官方文档](https://api.minimax.com/document)
+# 管理员密码
+# 请设置一个强密码，包含大小写字母、数字和特殊符号
+ADMIN_PASSWORD=your_admin_password_here
+```
 
 ### 3. 启动后端服务
 
@@ -195,7 +199,6 @@ npm run dev
   "location": "所在地",
   "avatar": "/avatar.png",
   "email": "your@email.com",
-  "adminPassword": "admin123",
   "socialLinks": [
     {
       "name": "GitHub",
@@ -205,13 +208,21 @@ npm run dev
 }
 ```
 
-### AI 配置
+> 注意：`config.json` 中的敏感信息不会同步到 GitHub，请放心修改。
 
-编辑 `server/.env`：
+### 环境变量配置
+
+编辑 `server/.env`（不会被提交到 GitHub）：
 
 ```bash
+# MiniMax API Key
 MINIMAX_API_KEY=your_api_key_here
+
+# 管理员密码
+ADMIN_PASSWORD=your_admin_password_here
 ```
+
+> 如何获取 API-key？请参考 [MiniMax 官方文档](https://api.minimax.com/document)
 
 ##  常见问题
 
