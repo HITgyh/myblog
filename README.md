@@ -1,5 +1,8 @@
 # 个人博客系统 (MyBlog)
 
+[![MIT License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Claude Code Skills](https://img.shields.io/badge/Claude%20Code-Skills-blue?style=flat-square)](https://claude.com/claude-code)
+
 一个现代化的个人技术博客系统，采用前后端分离架构，支持 Markdown 文章渲染、分类浏览和响应式设计。
 
 ##  项目简介
