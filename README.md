@@ -16,7 +16,7 @@
 -  文章删除功能（移至回收站）
 -  AI 自动整理文章（打标签、智能归类）
 
-![博客截图](./images/blog-screenshot.png)
+![博客截图](./images/blog-screenshot.jpg)
 
 ##  项目结构
 
