@@ -157,10 +157,8 @@ app.put('/api/config', (req, res) => {
 app.post('/api/verify-password', (req, res) => {
   try {
     const { password } = req.body;
-    const configPath = path.join(__dirname, '../data/config.json');
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
-    if (config.adminPassword && config.adminPassword === password) {
+    if (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD === password) {
       res.json({ success: true });
     } else {
       res.status(401).json({ success: false, error: '密码错误' });
