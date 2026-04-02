@@ -17,45 +17,36 @@
 
 ```
 myblog/
-├── server/                    # 后端服务
+├── front/                    # 前端应用
 │   ├── src/
-│   │   ├── index.js         # Express 服务器主文件
-│   │   └── scanPosts.js     # 自动扫描和维护博客索引脚本
-│   ├── data/                # 数据目录
-│   │   ├── blogIndex.json   # 博客索引文件（自动生成）
-│   │   └── config.json      # 用户配置文件
-│   ├── posts/               # 博客文章目录
-│   │   ├── vue/            # Vue 相关文章
-│   │   │   └── Welcome.md
-│   │   └── leetcode/       # LeetCode 题解
-│   │       ├── BinarySearch.md
-│   │       ├── TwoSum.md
-│   │       └── ...         # 其他文章
-│   ├── package.json         # 后端依赖配置
-│   └── DATE_EXPLANATION.md  # 日期说明文档
+│   │   ├── components/
+│   │   │   └── homepage.vue  # 主页组件（含文章列表、上传、删除）
+│   │   ├── router/
+│   │   │   └── index.ts     # 路由配置
+│   │   ├── App.vue          # 根组件
+│   │   ├── main.ts         # 应用入口
+│   │   └── style.css       # 全局样式
+│   ├── public/              # 静态资源
+│   ├── index.html
+│   ├── package.json        # 前端依赖配置
+│   ├── vite.config.ts     # Vite 配置文件
+│   └── tsconfig*.json     # TypeScript 配置
 │
-├── src/                      # 前端应用
-│   ├── components/
-│   │   ├── homepage.vue    # 主页组件
-│   │   └── postdetail.vue   # 文章详情组件
-│   ├── router/
-│   │   └── index.ts        # 路由配置
-│   ├── data/
-│   │   └── blogIndex.json  # 博客索引（前端备用）
-│   ├── posts/               # 前端文章备份
-│   ├── assets/              # 静态资源
-│   ├── App.vue             # 根组件
-│   ├── main.ts             # 应用入口
-│   └── style.css           # 全局样式
+├── server/                   # 后端服务
+│   ├── src/
+│   │   ├── index.js       # Express 服务器主文件
+│   │   └── scanPosts.js   # 自动扫描和维护博客索引脚本
+│   ├── data/              # 数据目录
+│   │   ├── blogIndex.json # 博客索引文件（自动生成）
+│   │   └── config.json    # 用户配置文件
+│   ├── posts/             # 博客文章目录
+│   │   ├── vue/           # Vue 相关文章
+│   │   └── leetcode/      # LeetCode 题解
+│   ├── trash/             # 回收站（删除的文章）
+│   └── package.json       # 后端依赖配置
 │
-├── public/                  # 前端公共资源
-│   ├── avatar.png          # 头像图片
-│   ├── config.json         # 前端配置
-│   └── ...
-│
-├── package.json            # 前端依赖配置
-├── vite.config.ts        # Vite 配置文件
-└── README.md             # 项目说明文档
+├── README.md
+└── .gitignore
 ```
 
 ## 🛠️ 技术栈
@@ -79,18 +70,18 @@ myblog/
 
 ```bash
 # 安装前端依赖
-cd myblog
+cd front
 npm install
 
 # 安装后端依赖
-cd server
+cd ../server
 npm install
 ```
 
 ### 2. 启动后端服务
 
 ```bash
-cd myblog/server
+cd server
 npm start
 ```
 
@@ -100,6 +91,7 @@ npm start
 
 - `GET /api/posts` - 获取博客列表
 - `GET /api/posts/:category/:slug` - 获取指定文章内容
+- `DELETE /api/posts/:category/:slug` - 删除文章（移至回收站）
 - `GET /api/config` - 获取用户配置信息
 - `GET /api/maintain` - 手动维护博客索引
 
@@ -108,7 +100,7 @@ npm start
 在另一个终端窗口：
 
 ```bash
-cd myblog
+cd front
 npm run dev
 ```
 
