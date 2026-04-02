@@ -3,11 +3,24 @@
     <!-- 头部区域 -->
     <header v-if="configData" class="profile-section">
       <div class="profile-container">
-        <el-avatar :size="64" :src="configData.avatar" class="avatar">
-          <el-icon :size="32"><User /></el-icon>
-        </el-avatar>
+        <el-image
+          :src="configData.avatar"
+          class="avatar"
+          fit="cover"
+          :preview-src-list="[configData.avatar]"
+          preview-teleported
+        >
+          <template #error>
+            <el-icon :size="32"><User /></el-icon>
+          </template>
+        </el-image>
         <div class="profile-info">
-          <h1>{{ configData.name }}</h1>
+          <div class="name-row">
+            <h1>{{ configData.name }}</h1>
+            <el-button v-if="isAdmin" text bg class="edit-profile-btn" @click="openEditProfileDialog">
+              <el-icon><Edit /></el-icon>
+            </el-button>
+          </div>
           <p class="bio" v-if="configData.bio">{{ configData.bio }}</p>
           <div class="contact-row">
             <span class="contact-item" v-if="configData.email">
@@ -19,11 +32,41 @@
               {{ configData.location }}
             </span>
           </div>
+          <div class="social-links" v-if="configData.socialLinks && configData.socialLinks.length">
+            <a
+              v-for="link in configData.socialLinks"
+              :key="link.name"
+              :href="link.url"
+              target="_blank"
+              class="social-link"
+            >
+              <el-icon><Link /></el-icon>
+              {{ link.name }}
+            </a>
+          </div>
         </div>
-        <el-button type="primary" class="upload-btn" @click="openUploadDialog">
-          <el-icon><Upload /></el-icon>
-          上传文章
+        <el-button v-if="!isAdmin" class="login-btn" @click="openLoginDialog">
+          <el-icon><UserFilled /></el-icon>
+          管理员登录
         </el-button>
+        <template v-if="isAdmin">
+          <el-button class="logout-btn" @click="handleLogout">
+            <el-icon><SwitchButton /></el-icon>
+            退出登录
+          </el-button>
+          <el-tooltip content="上传 Markdown 文章" placement="bottom">
+            <el-button type="primary" class="upload-btn" @click="openUploadDialog">
+              <el-icon><Upload /></el-icon>
+              上传文章
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="AI 自动分析文章并打标签归类" placement="bottom">
+            <el-button type="warning" class="organize-btn" :loading="organizing" @click="handleOrganizeAll">
+              <el-icon><MagicStick /></el-icon>
+              AI 整理
+            </el-button>
+          </el-tooltip>
+        </template>
       </div>
     </header>
 
@@ -158,7 +201,7 @@
                     <el-icon><ArrowLeft /></el-icon>
                     返回列表
                   </el-button>
-                  <el-button text bg class="delete-btn" @click="handleDelete">
+                  <el-button v-if="isAdmin" text bg class="delete-btn" @click="handleDelete">
                     <svg class="delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                       <line x1="10" y1="11" x2="10" y2="17"/>
@@ -168,10 +211,6 @@
                   </el-button>
                 </div>
                 <div class="post-meta">
-                  <el-tag size="large" effect="dark" :type="getCategoryType(currentPost.category)">
-                    <el-icon><component :is="getCategoryIcon(currentPost.category)" /></el-icon>
-                    {{ currentPost.category }}
-                  </el-tag>
                   <span class="post-date">
                     <el-icon><Calendar /></el-icon>
                     {{ formatDate(currentPost.date) }}
@@ -229,32 +268,10 @@
       class="upload-dialog"
     >
       <el-form class="upload-form" label-position="top">
-        <el-form-item label="选择分类">
-          <el-select
-            v-model="uploadCategory"
-            placeholder="选择或输入新分类"
-            style="width: 100%"
-            filterable
-            allow-create
-            default-first-option
-            size="large"
-          >
-            <template #prefix>
-              <el-icon><Folder /></el-icon>
-            </template>
-            <el-option
-              v-for="(count, category) in categoryMap"
-              :key="category"
-              :label="category"
-              :value="category"
-            >
-              <span>{{ category }}</span>
-              <el-tag size="small" type="info" style="margin-left: 8px">{{ count }}</el-tag>
-            </el-option>
-          </el-select>
-          <div class="form-tip">可以输入新分类名来创建</div>
-        </el-form-item>
-
+        <div class="upload-tip">
+          <el-icon><MagicStick /></el-icon>
+          上传后 AI 将自动进行分类归档
+        </div>
         <el-form-item label="选择文件">
           <el-upload
             class="upload-area"
@@ -284,6 +301,72 @@
         >
           <el-icon v-if="!uploading"><Upload /></el-icon>
           {{ uploading ? '上传中...' : '上传文章' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 管理员登录对话框 -->
+    <el-dialog
+      v-model="loginDialogVisible"
+      title="管理员登录"
+      width="400px"
+      :close-on-click-modal="false"
+      class="login-dialog"
+    >
+      <el-form label-position="top" @submit.prevent>
+        <el-form-item label="请输入管理员密码">
+          <el-input
+            v-model="loginPassword"
+            type="password"
+            placeholder="输入管理员密码"
+            size="large"
+            autocomplete="off"
+            @keyup.enter="handleLogin"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="loginDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="loginLoading" @click="handleLogin">
+          登录
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑个人信息对话框 -->
+    <el-dialog
+      v-model="editProfileDialogVisible"
+      title="编辑个人信息"
+      width="500px"
+      :close-on-click-modal="false"
+      class="edit-profile-dialog"
+    >
+      <el-form :model="editForm" label-position="top">
+        <el-form-item label="姓名">
+          <el-input v-model="editForm.name" placeholder="请输入姓名" size="large" />
+        </el-form-item>
+        <el-form-item label="简介">
+          <el-input v-model="editForm.bio" type="textarea" :rows="2" placeholder="请输入简介" />
+        </el-form-item>
+        <el-form-item label="位置">
+          <el-input v-model="editForm.location" placeholder="请输入位置" size="large" />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="editForm.email" placeholder="请输入邮箱" size="large" />
+        </el-form-item>
+        <el-form-item label="社交链接">
+          <div v-for="(link, index) in editForm.socialLinks" :key="index" class="social-link-edit">
+            <el-input v-model="link.name" placeholder="名称（如：GitHub）" size="large" />
+            <el-input v-model="link.url" placeholder="链接（如：https://github.com/user）" size="large" />
+            <el-button type="danger" @click="removeSocialLink(index)" :icon="Delete" circle />
+          </div>
+          <el-button type="default" @click="addSocialLink" size="large">添加链接</el-button>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editProfileDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editLoading" @click="handleSaveProfile">
+          保存
         </el-button>
       </template>
     </el-dialog>
@@ -319,7 +402,11 @@ import {
   MagicStick,
   DataLine,
   List,
-  Collection
+  Collection,
+  View,
+  SwitchButton,
+  Edit,
+  UserFilled
 } from '@element-plus/icons-vue';
 
 const configData = ref(null);
@@ -331,9 +418,32 @@ const currentPost = ref(null);
 const postContent = ref('');
 const loading = ref(false);
 const uploadDialogVisible = ref(false);
-const uploadCategory = ref('leetcode');
 const uploadFile = ref(null);
 const uploading = ref(false);
+const organizing = ref(false);
+const isAdmin = ref(localStorage.getItem('isAdmin') === 'true');
+const loginDialogVisible = ref(false);
+const loginPassword = ref('');
+const loginLoading = ref(false);
+
+const editProfileDialogVisible = ref(false);
+const editLoading = ref(false);
+
+const editForm = ref({
+  name: '',
+  bio: '',
+  location: '',
+  email: '',
+  socialLinks: []
+});
+
+const addSocialLink = () => {
+  editForm.value.socialLinks.push({ name: '', url: '' });
+};
+
+const removeSocialLink = (index) => {
+  editForm.value.socialLinks.splice(index, 1);
+};
 
 // 分类名称映射
 const categoryNames = {
@@ -524,8 +634,104 @@ const handleDelete = async () => {
 };
 
 const openUploadDialog = () => {
-  uploadCategory.value = selectedCategory.value === 'all' ? 'blog' : selectedCategory.value;
   uploadDialogVisible.value = true;
+};
+
+const openLoginDialog = () => {
+  loginPassword.value = '';
+  loginDialogVisible.value = true;
+};
+
+const handleLogin = async () => {
+  if (!loginPassword.value) {
+    ElMessage.error('请输入密码');
+    return;
+  }
+
+  loginLoading.value = true;
+
+  try {
+    const response = await fetch('/api/verify-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: loginPassword.value })
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      isAdmin.value = true;
+      localStorage.setItem('isAdmin', 'true');
+      loginDialogVisible.value = false;
+      ElMessage.success('登录成功');
+    } else {
+      ElMessage.error(result.error || '密码错误');
+    }
+  } catch (error) {
+    console.error('登录失败:', error);
+    ElMessage.error('登录失败，请重试');
+  } finally {
+    loginLoading.value = false;
+  }
+};
+
+const handleLogout = () => {
+  isAdmin.value = false;
+  localStorage.removeItem('isAdmin');
+  ElMessage.success('已退出登录');
+};
+
+const openEditProfileDialog = () => {
+  editForm.value = {
+    name: configData.value?.name || '',
+    bio: configData.value?.bio || '',
+    location: configData.value?.location || '',
+    email: configData.value?.email || '',
+    socialLinks: configData.value?.socialLinks ? [...configData.value.socialLinks] : []
+  };
+  editProfileDialogVisible.value = true;
+};
+
+const handleSaveProfile = async () => {
+  if (!editForm.value.name) {
+    ElMessage.error('请输入姓名');
+    return;
+  }
+
+  editLoading.value = true;
+
+  try {
+    const response = await fetch('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: editForm.value.name,
+        bio: editForm.value.bio,
+        location: editForm.value.location,
+        email: editForm.value.email,
+        socialLinks: editForm.value.socialLinks
+      })
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      ElMessage.success('保存成功');
+      editProfileDialogVisible.value = false;
+      // 刷新配置数据
+      const configRes = await fetch('/api/config');
+      if (configRes.ok) {
+        configData.value = await configRes.json();
+      }
+    } else {
+      ElMessage.error(result.error || '保存失败');
+    }
+  } catch (error) {
+    console.error('保存失败:', error);
+    ElMessage.error('保存失败，请重试');
+  } finally {
+    editLoading.value = false;
+  }
 };
 
 const handleFileChange = (uploadFile_) => {
@@ -545,7 +751,7 @@ const handleUpload = async () => {
   uploading.value = true;
   const formData = new FormData();
   formData.append('file', uploadFile.value);
-  formData.append('category', uploadCategory.value);
+  formData.append('category', 'blog');
 
   try {
     const response = await fetch('/api/upload', {
@@ -556,9 +762,38 @@ const handleUpload = async () => {
     const result = await response.json();
 
     if (response.ok && result.success) {
-      ElMessage.success('上传成功！');
+      ElMessage.success('上传成功，正在 AI 整理...');
+
+      // 获取文件名作为 slug（去掉.md扩展名）
+      const slug = uploadFile.value.name.replace('.md', '');
+
+      // 调用 AI 整理接口
+      try {
+        const organizeRes = await fetch('/api/ai/organize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category: 'blog', slug })
+        });
+
+        const organizeResult = await organizeRes.json();
+
+        if (organizeRes.ok && organizeResult.success) {
+          ElMessage.success('AI 整理完成！');
+        } else if (organizeResult.isApiKeyError) {
+          ElMessage.error({
+            message: organizeResult.error + '，请参照 README 文档正确配置 API-key',
+            duration: 5000
+          });
+        } else if (!organizeRes.ok) {
+          ElMessage.error(organizeResult.error || 'AI 整理失败');
+        }
+      } catch (error) {
+        console.error('AI 整理失败:', error);
+      }
+
       uploadDialogVisible.value = false;
       uploadFile.value = null;
+
       const postsRes = await fetch('/api/posts');
       if (postsRes.ok) {
         blogPosts.value = await postsRes.json();
@@ -571,6 +806,54 @@ const handleUpload = async () => {
     ElMessage.error('上传失败，请重试');
   } finally {
     uploading.value = false;
+  }
+};
+
+const handleOrganizeAll = async () => {
+  try {
+    await ElMessageBox.confirm(
+      'AI 将分析所有文章并自动打标签和归类，是否继续？',
+      'AI 整理',
+      {
+        confirmButtonText: '开始整理',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+
+    organizing.value = true;
+
+    const response = await fetch('/api/ai/organize-all', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      ElMessage.success(result.message || '整理完成！');
+      // 刷新文章列表
+      const postsRes = await fetch('/api/posts');
+      if (postsRes.ok) {
+        blogPosts.value = await postsRes.json();
+      }
+    } else if (result.isApiKeyError) {
+      ElMessage.error({
+        message: result.error + '，请参照 README 文档正确配置 API-key',
+        duration: 5000
+      });
+    } else {
+      ElMessage.error(result.error || '整理失败');
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('整理失败:', error);
+      ElMessage.error('整理失败，请重试');
+    }
+  } finally {
+    organizing.value = false;
   }
 };
 
@@ -622,13 +905,21 @@ onMounted(async () => {
   margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 2rem;
 }
 
 .avatar {
-  border: 3px solid rgba(255, 255, 255, 0.3);
+  width: 120px;
+  height: 120px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.avatar:hover {
+  transform: scale(1.05);
 }
 
 .profile-info {
@@ -638,33 +929,133 @@ onMounted(async () => {
 
 .profile-info h1 {
   margin: 0;
-  font-size: 1.75rem;
+  font-size: 2.25rem;
   font-weight: 700;
   letter-spacing: -0.5px;
 }
 
+.name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.edit-profile-btn {
+  color: rgba(255, 255, 255, 0.5) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0.25rem !important;
+  font-size: 1rem;
+}
+
+.edit-profile-btn:hover {
+  color: white !important;
+  background: transparent !important;
+}
+
+.social-link-edit {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  align-items: center;
+}
+
+.social-link-edit .el-input {
+  flex: 1;
+}
+
 .bio {
-  margin: 0.5rem 0 0;
-  font-size: 0.95rem;
+  margin: 0.75rem 0 0;
+  font-size: 1.1rem;
   opacity: 0.9;
   color: rgba(255, 255, 255, 0.9);
 }
 
 .contact-row {
   display: flex;
-  gap: 1.5rem;
-  margin-top: 0.5rem;
+  gap: 2rem;
+  margin-top: 0.75rem;
 }
 
 .contact-item {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
+  gap: 0.5rem;
+  font-size: 1rem;
   opacity: 0.85;
 }
 
-.upload-btn {
+.social-links {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.social-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.social-link:hover {
+  background: rgba(255, 255, 255, 0.25);
+  color: white;
+  transform: translateY(-2px);
+}
+
+.upload-btn,
+.login-btn,
+.logout-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.875rem 1.75rem;
+  border-radius: 12px;
+  font-weight: 500;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.upload-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: #667eea;
+  transform: translateY(-2px);
+}
+
+.organize-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  padding: 0.875rem 1.75rem;
+  border-radius: 12px;
+  font-weight: 500;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.organize-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  filter: brightness(1.1);
+}
+
+.login-btn,
+.visitor-btn,
+.logout-btn {
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.3);
   color: white;
@@ -677,10 +1068,20 @@ onMounted(async () => {
   gap: 0.5rem;
 }
 
-.upload-btn:hover {
+.login-btn:hover,
+.visitor-btn:hover,
+.logout-btn:hover {
   background: rgba(255, 255, 255, 0.95);
   color: #667eea;
-  transform: translateY(-2px);
+}
+
+.logout-btn:hover {
+  color: #ef4444;
+}
+
+.admin-buttons {
+  display: flex;
+  gap: 0.75rem;
 }
 
 /* 主内容区域 */
@@ -939,9 +1340,27 @@ onMounted(async () => {
 .post-meta {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
   font-size: 0.9rem;
+}
+
+.post-meta .el-tag {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.category-tag {
+  text-transform: capitalize;
+  letter-spacing: 0.5px;
+}
+
+.post-detail-header .post-date {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .post-detail-header .post-title {
@@ -1108,6 +1527,21 @@ onMounted(async () => {
   color: #9ca3af;
 }
 
+.upload-tip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  color: white;
+  font-size: 1rem;
+  font-weight: 500;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
 /* 过渡动画 */
 .article-enter-active,
 .article-leave-active {
@@ -1162,9 +1596,36 @@ onMounted(async () => {
     gap: 1rem;
   }
 
+  .social-links {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
   .upload-btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .organize-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .login-btn,
+  .visitor-btn,
+  .logout-btn,
+  .upload-btn,
+  .organize-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .admin-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
   }
 
   .category-sidebar {
@@ -1306,5 +1767,110 @@ onMounted(async () => {
 :deep(.delete-confirm-btn) {
   background: #ef4444 !important;
   border-color: #ef4444 !important;
+}
+
+:deep(.el-tooltip__trigger:focus) {
+  outline: none;
+}
+
+:deep(.el-popper.is-dark) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-size: 0.85rem !important;
+  padding: 8px 14px !important;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+}
+
+:deep(.el-popper.is-dark .el-popper__arrow::before) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+}
+
+:deep(.login-dialog) {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+:deep(.login-dialog .el-dialog__header) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin: 0;
+  padding: 1.25rem 1.5rem;
+}
+
+:deep(.login-dialog .el-dialog__title) {
+  color: white;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+:deep(.login-dialog .el-dialog__headerbtn) {
+  display: none;
+}
+
+:deep(.login-dialog .el-dialog__body) {
+  padding: 2rem;
+  background: white;
+}
+
+:deep(.login-dialog .el-dialog__footer) {
+  padding: 1.25rem 1.5rem;
+  background: #fafbfc;
+  border-top: 1px solid #eef0f5;
+}
+
+:deep(.edit-profile-dialog) {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+:deep(.edit-profile-dialog .el-dialog__header) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin: 0;
+  padding: 1.25rem 1.5rem;
+}
+
+:deep(.edit-profile-dialog .el-dialog__title) {
+  color: white;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+:deep(.edit-profile-dialog .el-dialog__headerbtn) {
+  display: none;
+}
+
+:deep(.edit-profile-dialog .el-dialog__body) {
+  padding: 2rem;
+  background: white;
+}
+
+:deep(.edit-profile-dialog .el-dialog__footer) {
+  padding: 1.25rem 1.5rem;
+  background: #fafbfc;
+  border-top: 1px solid #eef0f5;
+}
+
+:deep(.el-image) {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+}
+
+:deep(.el-image__inner) {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+:deep(.el-image-viewer__wrapper) {
+  background: rgba(0, 0, 0, 0.9) !important;
+}
+
+:deep(.el-image-viewer__img) {
+  max-width: 80vw;
+  max-height: 80vh;
+  object-fit: contain;
 }
 </style>

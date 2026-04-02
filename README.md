@@ -14,6 +14,7 @@
 -  分页展示
 -  文章上传功能
 -  文章删除功能（移至回收站）
+-  AI 自动整理文章（打标签、智能归类）
 
 ##  项目结构
 
@@ -22,7 +23,7 @@ myblog/
 ├── front/                    # 前端应用
 │   ├── src/
 │   │   ├── components/
-│   │   │   └── homepage.vue  # 主页组件（含文章列表、上传、删除）
+│   │   │   └── homepage.vue  # 主页组件（含文章列表、上传、删除、AI整理）
 │   │   ├── router/
 │   │   │   └── index.ts     # 路由配置
 │   │   ├── App.vue          # 根组件
@@ -37,7 +38,8 @@ myblog/
 ├── server/                   # 后端服务
 │   ├── src/
 │   │   ├── index.js       # Express 服务器主文件
-│   │   └── scanPosts.js   # 自动扫描和维护博客索引脚本
+│   │   ├── scanPosts.js   # 手动维护博客索引脚本
+│   │   └── aiService.js   # AI 服务模块（调用 MiniMax API）
 │   ├── data/              # 数据目录
 │   │   ├── blogIndex.json # 博客索引文件（自动生成）
 │   │   └── config.json    # 用户配置文件
@@ -66,6 +68,8 @@ myblog/
 - **Express** - 轻量级 Web 服务器框架
 - **Multer** - 文件上传中间件
 - **CORS** - 跨域资源共享中间件
+- **Axios** - HTTP 请求库
+- **dotenv** - 环境变量管理
 
 ##  快速开始
 
@@ -81,7 +85,24 @@ cd ../server
 npm install
 ```
 
-### 2. 启动后端服务
+### 2. 配置 API-key（如需使用 AI 功能）
+
+在后端 `server` 目录下创建 `.env` 文件：
+
+```bash
+cd server
+touch .env
+```
+
+编辑 `.env` 文件，添加 MiniMax API-key：
+
+```
+MINIMAX_API_KEY=your_api_key_here
+```
+
+> 如何获取 API-key？请参考 [MiniMax 官方文档](https://api.minimax.com/document)
+
+### 3. 启动后端服务
 
 ```bash
 cd server
@@ -90,7 +111,7 @@ npm start
 
 后端服务将启动在 **http://localhost:3000**
 
-### 3. 启动前端服务
+### 4. 启动前端服务
 
 在另一个终端窗口：
 
@@ -101,7 +122,7 @@ npm run dev
 
 前端服务将启动在 **http://localhost:5173**
 
-### 4. 访问博客
+### 5. 访问博客
 
 打开浏览器访问 **http://localhost:5173** 即可查看博客。
 
@@ -113,8 +134,16 @@ npm run dev
 - **分类管理**：支持创建自定义分类
 - **自动索引**：文章自动扫描并生成索引
 
+### AI 整理功能
+- **自动打标签**：AI 分析文章内容，提取 3-5 个关键词作为标签
+- **智能归类**：AI 分析文章主题，建议最合适的分类
+- **批量整理**：一键整理所有文章
+
+> 注意：使用 AI 功能需要配置 MiniMax API-key。若未配置或配置错误，前端会提示参照本文档进行配置。
+
 ### 前端功能
 - 个人资料展示区
+- 社交链接展示（可编辑）
 - 博客分类侧边栏（支持筛选）
 - 博客文章列表（分页展示，每页 8 篇）
 - 文章详情页（完整 Markdown 渲染）
@@ -130,8 +159,13 @@ npm run dev
 | GET | `/api/posts/:category/:slug` | 获取指定文章内容 |
 | DELETE | `/api/posts/:category/:slug` | 删除文章（移至回收站） |
 | GET | `/api/config` | 获取用户配置信息 |
+| PUT | `/api/config` | 更新用户配置信息 |
+| POST | `/api/verify-password` | 验证管理员密码 |
+| POST | `/api/avatar` | 上传头像 |
 | GET | `/api/maintain` | 手动维护博客索引 |
 | POST | `/api/upload` | 上传 Markdown 文件 |
+| POST | `/api/ai/organize` | AI 整理单篇文章 |
+| POST | `/api/ai/organize-all` | AI 批量整理所有文章 |
 
 ##  添加新文章
 
@@ -140,11 +174,11 @@ npm run dev
 1. 点击右上角「上传文章」按钮
 2. 选择分类（可输入新分类名创建）
 3. 拖拽或选择 Markdown 文件
-4. 点击上传
+4. 点击上传（上传后自动进行 AI 整理）
 
 ### 方式二：手动添加
 
-将 Markdown 文件放入 `server/posts/{category}/` 目录，重启后端服务即可自动扫描。
+将 Markdown 文件放入 `server/posts/{category}/` 目录，然后手动访问 `/api/maintain` 触发索引更新。
 
 ##  配置说明
 
@@ -159,6 +193,7 @@ npm run dev
   "location": "所在地",
   "avatar": "/avatar.png",
   "email": "your@email.com",
+  "adminPassword": "admin123",
   "socialLinks": [
     {
       "name": "GitHub",
@@ -167,6 +202,31 @@ npm run dev
   ]
 }
 ```
+
+### AI 配置
+
+编辑 `server/.env`：
+
+```bash
+MINIMAX_API_KEY=your_api_key_here
+```
+
+##  常见问题
+
+### Q: 后端启动失败？
+A: 检查 3000 端口是否被占用，或安装依赖是否完整。
+
+### Q: 文章添加后不显示？
+A: 重启后端服务，或手动访问 `/api/maintain` 触发索引更新。
+
+### Q: AI 整理功能提示 API-key 错误？
+A: 请确认已在 `server/.env` 文件中正确配置 `MINIMAX_API_KEY`。若未创建该文件，请参照本文档「配置 API-key」章节创建并配置。
+
+### Q: 前端显示"请参照 README 文档正确配置 API-key"？
+A: 这表示后端调用 MiniMax API 时出现认证错误。请检查：
+1. 是否已创建 `server/.env` 文件
+2. 文件中 `MINIMAX_API_KEY` 的值是否正确
+3. API-key 是否有效或已过期
 
 ##  开发说明
 
@@ -192,14 +252,6 @@ npm start
 # 开发模式（监听文件变化自动重启）
 npm run dev
 ```
-
-##  常见问题
-
-### Q: 后端启动失败？
-A: 检查 3000 端口是否被占用，或安装依赖是否完整。
-
-### Q: 文章添加后不显示？
-A: 重启后端服务，或手动访问 `/api/maintain` 触发索引更新。
 
 ##  许可证
 
