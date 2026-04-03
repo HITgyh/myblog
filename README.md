@@ -19,7 +19,7 @@
 -  文章删除功能（移至回收站）
 -  AI 自动整理文章（打标签、智能归类）
 
-![homepage](.\images\homepage.png)
+![homepage](./images/homepage.png)
 
 ##  项目结构
 
