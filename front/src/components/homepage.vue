@@ -71,12 +71,6 @@
                 上传文章
               </el-button>
             </el-tooltip>
-            <el-tooltip content="AI 自动分析文章并打标签归类" placement="bottom">
-              <el-button type="warning" class="organize-btn" :loading="organizing" @click="handleOrganizeAll">
-                <el-icon><MagicStick /></el-icon>
-                AI 整理
-              </el-button>
-            </el-tooltip>
             <el-button class="logout-btn" @click="handleLogout">
               <el-icon><SwitchButton /></el-icon>
               退出登录
@@ -476,7 +470,6 @@ const uploadPreview = ref('');
 const uploadRef = ref(null);
 const previewDialogVisible = ref(false);
 const previewFileName = ref('');
-const organizing = ref(false);
 const isAdmin = ref(localStorage.getItem('isAdmin') === 'true');
 const loginDialogVisible = ref(false);
 const loginPassword = ref('');
@@ -911,54 +904,6 @@ const handleUpload = async () => {
   }
 };
 
-const handleOrganizeAll = async () => {
-  try {
-    await ElMessageBox.confirm(
-      'AI 将分析所有文章并自动打标签和归类，是否继续？',
-      'AI 整理',
-      {
-        confirmButtonText: '开始整理',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    );
-
-    organizing.value = true;
-
-    const response = await fetch('/api/ai/organize-all', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-
-    const result = await response.json();
-
-    if (response.ok && result.success) {
-      ElMessage.success(result.message || '整理完成！');
-      // 刷新文章列表
-      const postsRes = await fetch('/api/posts');
-      if (postsRes.ok) {
-        blogPosts.value = await postsRes.json();
-      }
-    } else if (result.isApiKeyError) {
-      ElMessage.error({
-        message: result.error + '，请参照 README 文档正确配置 API-key',
-        duration: 5000
-      });
-    } else {
-      ElMessage.error(result.error || '整理失败');
-    }
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('整理失败:', error);
-      ElMessage.error('整理失败，请重试');
-    }
-  } finally {
-    organizing.value = false;
-  }
-};
-
 const triggerAvatarUpload = () => {
   avatarInputRef.value?.click();
 };
@@ -1219,27 +1164,6 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.95);
   color: #667eea;
   transform: translateY(-2px);
-}
-
-.organize-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  color: white;
-  padding: 0.875rem 1.75rem;
-  border-radius: 12px;
-  font-weight: 500;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-}
-
-.organize-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-  filter: brightness(1.1);
 }
 
 .login-btn,
@@ -1944,16 +1868,10 @@ onMounted(async () => {
     justify-content: center;
   }
 
-  .organize-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
   .login-btn,
   .visitor-btn,
   .logout-btn,
-  .upload-btn,
-  .organize-btn {
+  .upload-btn {
     width: 100%;
     justify-content: center;
   }

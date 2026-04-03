@@ -135,41 +135,4 @@ async function analyzePost(title, content) {
   }
 }
 
-/**
- * 批量分析所有文章
- * @param {Array} posts - 文章索引列表
- * @param {Function} getPostContent - 获取文章内容的函数
- * @returns {Promise<Array>} - 分析结果列表
- */
-async function batchAnalyze(posts, getPostContent) {
-  const results = [];
-
-  for (const post of posts) {
-    try {
-      console.log(`正在分析: ${post.title}...`);
-      const content = await getPostContent(post.slug);
-      const analysis = await analyzePost(post.title, content);
-      results.push({
-        slug: post.slug,
-        ...analysis,
-        success: true
-      });
-
-      // 添加延迟避免 API 限流
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } catch (error) {
-      console.error(`分析失败 [${post.slug}]:`, error.message);
-      results.push({
-        slug: post.slug,
-        tags: post.tags || [],
-        success: false,
-        error: error.message,
-        isApiKeyError: error instanceof ApiKeyError
-      });
-    }
-  }
-
-  return results;
-}
-
-export { analyzePost, batchAnalyze, ApiKeyError };
+export { analyzePost, ApiKeyError };

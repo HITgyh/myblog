@@ -374,61 +374,6 @@ app.post('/api/ai/organize', async (req, res) => {
   }
 });
 
-// AI 批量整理所有文章
-app.post('/api/ai/organize-all', async (req, res) => {
-  try {
-    // 获取所有文章索引
-    const indexPath = path.join(__dirname, '../data/blogIndex.json');
-    const indexData = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
-
-    // 获取文章内容的辅助函数
-    const getPostContent = async (slug) => {
-      const filePath = path.join(__dirname, `../posts/${slug}.md`);
-      if (fs.existsSync(filePath)) {
-        return fs.readFileSync(filePath, 'utf-8');
-      }
-      return '';
-    };
-
-    // 批量分析
-    const results = await batchAnalyze(indexData, getPostContent);
-
-    // 检查是否有 API-key 错误
-    const apiKeyErrorResult = results.find(r => r.isApiKeyError);
-    if (apiKeyErrorResult) {
-      return res.status(401).json({
-        error: apiKeyErrorResult.error,
-        isApiKeyError: true
-      });
-    }
-
-    // 更新 blogIndex.json
-    for (const result of results) {
-      const postIndex = indexData.findIndex(p => p.slug === result.slug);
-      if (postIndex !== -1) {
-        indexData[postIndex].tags = result.tags;
-      }
-    }
-
-    fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), 'utf-8');
-
-    const successCount = results.filter(r => r.success).length;
-    const failCount = results.filter(r => !r.success).length;
-
-    res.json({
-      success: true,
-      message: `整理完成！成功: ${successCount}，失败: ${failCount}`,
-      results
-    });
-  } catch (error) {
-    console.error('批量整理失败:', error);
-    if (error instanceof ApiKeyError) {
-      return res.status(401).json({ error: error.message, isApiKeyError: true });
-    }
-    res.status(500).json({ error: '批量整理失败: ' + error.message });
-  }
-});
-
 app.listen(PORT, () => {
   console.log(`博客后端服务已启动: http://localhost:${PORT}`);
   console.log(`API 端点:`);
@@ -443,5 +388,4 @@ app.listen(PORT, () => {
   console.log(`  - GET  /api/maintain     - 手动维护博客索引`);
   console.log(`  - POST /api/upload       - 上传 Markdown 文件`);
   console.log(`  - POST /api/ai/organize  - AI 整理单篇文章`);
-  console.log(`  - POST /api/ai/organize-all - AI 批量整理所有文章`);
 });
