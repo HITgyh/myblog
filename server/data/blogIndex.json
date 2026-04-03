@@ -1,12 +1,57 @@
 [
   {
-    "slug": "Welcome",
-    "title": "Welcome",
-    "description": "",
-    "category": "welcome",
-    "date": "2026-04-02",
+    "slug": "BinarySearch",
+    "title": "Binary Search",
+    "description": "介绍二分查找算法，解决在已排序数组中查找目标值的问题，提供C++和JavaScript实现。",
+    "date": "2026-04-03",
     "tags": [
-      "Welcome"
+      "Binary Search",
+      "Algorithm",
+      "LeetCode",
+      "C++",
+      "JavaScript"
+    ],
+    "category": "leetcode"
+  },
+  {
+    "slug": "DesignLinkedList",
+    "title": "Design Linked List",
+    "description": "详细实现单链表或双链表的 MyLinkedList 类，提供 get、addAtHead、addAtTail、addAtIndex、deleteAtIndex 等常用操作，并在 LeetCode 707 中验证功能。",
+    "date": "2026-04-03",
+    "tags": [
+      "Linked List",
+      "Data Structure",
+      "LeetCode",
+      "Design",
+      "C++"
+    ],
+    "category": "leetcode"
+  },
+  {
+    "slug": "happyNumber",
+    "title": "202. Happy Number",
+    "description": "通过哈希集合检测循环判定正整数是否为快乐数，并提供JavaScript实现示例",
+    "date": "2026-04-03",
+    "tags": [
+      "Happy Number",
+      "LeetCode",
+      "Algorithm",
+      "JavaScript",
+      "Set"
+    ],
+    "category": "leetcode"
+  },
+  {
+    "slug": "SpiralMatrixII",
+    "title": "Spiral Matrix II",
+    "description": "解析LeetCode 59题螺旋矩阵II，提供C++实现代码，利用四方向循环生成n×n螺旋矩阵。",
+    "date": "2026-04-03",
+    "tags": [
+      "LeetCode",
+      "Spiral Matrix",
+      "C++",
+      "Algorithm",
+      "Matrix"
     ]
   }
 ]

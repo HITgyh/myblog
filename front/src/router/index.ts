@@ -11,7 +11,7 @@ const router = createRouter({
       component: HomePage
     },
     {
-      path: '/post/:category/:slug',
+      path: '/post/:slug',
       name: 'post-detail',
       component: PostDetail,
       props: true

@@ -19,7 +19,7 @@
         </button>
         
         <div class="post-meta">
-          <span class="post-category">{{ postData?.category }}</span>
+          <span class="post-category">{{ postData?.category || '未分类' }}</span>
           <span class="post-date">{{ formatDate(postData?.date) }}</span>
         </div>
         
@@ -45,10 +45,6 @@ import { marked } from 'marked'
 const router = useRouter()
 
 const props = defineProps({
-  category: {
-    type: String,
-    required: true
-  },
   slug: {
     type: String,
     required: true
@@ -72,7 +68,7 @@ const loadPostData = async () => {
   try {
     const [postRes, contentRes] = await Promise.all([
       fetch('/api/posts'),
-      fetch(`/api/posts/${props.category}/${props.slug}`)
+      fetch(`/api/posts/${props.slug}`)
     ])
 
     if (!postRes.ok || !contentRes.ok) {
@@ -80,9 +76,7 @@ const loadPostData = async () => {
     }
 
     const posts = await postRes.json()
-    postData.value = posts.find(post => 
-      post.category === props.category && post.slug === props.slug
-    )
+    postData.value = posts.find(post => post.slug === props.slug)
 
     const content = await contentRes.text()
     postContent.value = marked.parse(content)

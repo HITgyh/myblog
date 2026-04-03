@@ -15,26 +15,23 @@ class ApiKeyError extends Error {
  * 调用 MiniMax API 分析文章
  * @param {string} title - 文章标题
  * @param {string} content - 文章内容
- * @param {string} currentCategory - 当前分类
- * @returns {Promise<{tags: string[], suggestedCategory: string}>}
+ * @returns {Promise<{tags: string[]}>}
  */
-async function analyzePost(title, content, currentCategory) {
+async function analyzePost(title, content) {
   const prompt = `你是一个博客文章分析助手。请分析以下文章内容，提取：
-1. 标签（tags）：3-5个关键词标签
-2. 建议分类（suggestedCategory）：最适合的分类名称（可以是新的分类或者已有的：${currentCategory}）
+1. 标签（tags）：3-5个关键词标签，使用英文
+2. 描述（description）：20-50字的中文文章简介，用于展示在文章列表中
 
 文章标题：${title}
 文章内容：${content.slice(0, 2000)}
 
 请以JSON格式返回：
 {
-  "tags": ["标签1", "标签2", "标签3"],
-  "suggestedCategory": "分类名称"
+  "tags": ["Tag1", "Tag2", "Tag3"],
+  "description": "这是文章的中文简介..."
 }
 
 注意：
-- 标签使用英文，便于搜索和过滤
-- 分类名称使用英文小写
 - 只返回JSON，不要有其他文字`;
 
   try {
@@ -42,7 +39,7 @@ async function analyzePost(title, content, currentCategory) {
       MINIMAX_API_URL,
       {
         model: MODEL,
-        max_tokens: 1000,
+        max_tokens: 3000,
         messages: [
           {
             role: 'user',
@@ -70,9 +67,16 @@ async function analyzePost(title, content, currentCategory) {
     // 解析 Anthropic 格式响应
     let resultText;
     if (response.data.content && Array.isArray(response.data.content)) {
+      // 优先查找 text 类型
       const textBlock = response.data.content.find(block => block.type === 'text');
       if (textBlock && textBlock.text) {
         resultText = textBlock.text;
+      } else {
+        // 如果没有 text 类型，尝试从 thinking 类型提取
+        const thinkingBlock = response.data.content.find(block => block.type === 'thinking');
+        if (thinkingBlock && thinkingBlock.thinking) {
+          resultText = thinkingBlock.thinking;
+        }
       }
     }
 
@@ -80,13 +84,36 @@ async function analyzePost(title, content, currentCategory) {
       throw new Error('无法从响应中提取文本: ' + JSON.stringify(response.data));
     }
 
-    // 解析 JSON 响应
+    // 尝试从 resultText 中解析 JSON
     const jsonMatch = resultText.match(/\{[\s\S]*?\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+          description: typeof parsed.description === 'string' ? parsed.description : ''
+        };
+      } catch (e) {
+        // JSON 解析失败，尝试从 thinking 内容中提取
+      }
+    }
+
+    // 从 thinking 内容中直接提取 description
+    // 尝试 "description": "xxx" 格式
+    const descMatch = resultText.match(/"description":\s*"([^"]+)"/);
+    if (descMatch) {
       return {
-        tags: Array.isArray(parsed.tags) ? parsed.tags : [],
-        suggestedCategory: parsed.suggestedCategory || currentCategory
+        tags: [],
+        description: descMatch[1]
+      };
+    }
+
+    // 尝试 Our description: "xxx" 格式
+    const ourDescMatch = resultText.match(/Our description:\s*"([^"]+)"/);
+    if (ourDescMatch) {
+      return {
+        tags: [],
+        description: ourDescMatch[1]
       };
     }
 
@@ -120,11 +147,10 @@ async function batchAnalyze(posts, getPostContent) {
   for (const post of posts) {
     try {
       console.log(`正在分析: ${post.title}...`);
-      const content = await getPostContent(post.category, post.slug);
-      const analysis = await analyzePost(post.title, content, post.category);
+      const content = await getPostContent(post.slug);
+      const analysis = await analyzePost(post.title, content);
       results.push({
         slug: post.slug,
-        category: post.category,
         ...analysis,
         success: true
       });
@@ -135,9 +161,7 @@ async function batchAnalyze(posts, getPostContent) {
       console.error(`分析失败 [${post.slug}]:`, error.message);
       results.push({
         slug: post.slug,
-        category: post.category,
-        tags: post.tags,
-        suggestedCategory: post.category,
+        tags: post.tags || [],
         success: false,
         error: error.message,
         isApiKeyError: error instanceof ApiKeyError

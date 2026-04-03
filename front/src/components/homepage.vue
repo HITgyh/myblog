@@ -3,17 +3,31 @@
     <!-- 头部区域 -->
     <header v-if="configData" class="profile-section">
       <div class="profile-container">
-        <el-image
-          :src="configData.avatar"
-          class="avatar"
-          fit="cover"
-          :preview-src-list="[configData.avatar]"
-          preview-teleported
-        >
-          <template #error>
-            <el-icon :size="32"><User /></el-icon>
-          </template>
-        </el-image>
+        <div class="avatar-wrapper">
+          <el-image
+            :src="configData.avatar"
+            class="avatar"
+            fit="cover"
+            :preview-src-list="[configData.avatar]"
+            preview-teleported
+          >
+            <template #error>
+              <el-icon :size="32"><User /></el-icon>
+            </template>
+          </el-image>
+          <el-tooltip v-if="isAdmin" content="更换头像" placement="bottom">
+            <el-button class="avatar-upload-btn" @click="triggerAvatarUpload">
+              <el-icon><Camera /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <input
+            ref="avatarInputRef"
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            style="display: none"
+            @change="handleAvatarChange"
+          />
+        </div>
         <div class="profile-info">
           <div class="name-row">
             <h1>{{ configData.name }}</h1>
@@ -152,7 +166,7 @@
                 <div class="card-meta">
                   <el-tag size="small" effect="plain" :type="getCategoryType(post.category)">
                     <el-icon><component :is="getCategoryIcon(post.category)" /></el-icon>
-                    {{ post.category }}
+                    {{ post.category || '未分类' }}
                   </el-tag>
                   <span class="post-date">
                     <el-icon><Calendar /></el-icon>
@@ -270,12 +284,25 @@
       class="upload-dialog"
     >
       <el-form class="upload-form" label-position="top">
-        <div class="upload-tip">
-          <el-icon><MagicStick /></el-icon>
-          上传后 AI 将自动进行分类归档
-        </div>
+        <el-collapse>
+          <el-collapse-item title="文章分类（可选）" name="category">
+            <el-autocomplete
+              v-model="uploadCategory"
+              :fetch-suggestions="queryCategory"
+              placeholder="输入文章分类"
+              size="large"
+              clearable
+              class="category-input"
+            >
+              <template #prefix>
+                <el-icon><Folder /></el-icon>
+              </template>
+            </el-autocomplete>
+          </el-collapse-item>
+        </el-collapse>
         <el-form-item label="选择文件">
           <el-upload
+            ref="uploadRef"
             class="upload-area"
             drag
             :auto-upload="false"
@@ -283,6 +310,7 @@
             accept=".md"
             @change="handleFileChange"
             @exceed="handleExceed"
+            @remove="handleFileRemove"
           >
             <el-icon class="upload-icon"><UploadFilled /></el-icon>
             <div class="upload-text">
@@ -296,6 +324,13 @@
       <template #footer>
         <el-button @click="uploadDialogVisible = false">取消</el-button>
         <el-button
+          v-if="uploadFile && !uploading"
+          @click="openPreview"
+        >
+          <el-icon><View /></el-icon>
+          查看预览
+        </el-button>
+        <el-button
           type="primary"
           :loading="uploading"
           :disabled="!uploadFile"
@@ -304,6 +339,19 @@
           <el-icon v-if="!uploading"><Upload /></el-icon>
           {{ uploading ? '上传中...' : '上传文章' }}
         </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 文件预览对话框 -->
+    <el-dialog
+      v-model="previewDialogVisible"
+      :title="previewFileName"
+      width="800px"
+      class="preview-dialog"
+    >
+      <div class="preview-dialog-content markdown-body" v-html="marked.parse(uploadPreview)"></div>
+      <template #footer>
+        <el-button @click="previewDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -408,7 +456,8 @@ import {
   View,
   SwitchButton,
   Edit,
-  UserFilled
+  UserFilled,
+  Camera
 } from '@element-plus/icons-vue';
 
 const configData = ref(null);
@@ -422,11 +471,19 @@ const loading = ref(false);
 const uploadDialogVisible = ref(false);
 const uploadFile = ref(null);
 const uploading = ref(false);
+const uploadCategory = ref('');
+const uploadPreview = ref('');
+const uploadRef = ref(null);
+const previewDialogVisible = ref(false);
+const previewFileName = ref('');
 const organizing = ref(false);
 const isAdmin = ref(localStorage.getItem('isAdmin') === 'true');
 const loginDialogVisible = ref(false);
 const loginPassword = ref('');
 const loginLoading = ref(false);
+
+const avatarInputRef = ref(null);
+const avatarUploading = ref(false);
 
 const editProfileDialogVisible = ref(false);
 const editLoading = ref(false);
@@ -516,10 +573,11 @@ const getTagType = (tag) => {
 const categoryMap = computed(() => {
   const map = {};
   blogPosts.value.forEach(post => {
-    if (map[post.category]) {
-      map[post.category]++;
+    const category = post.category || '未分类';
+    if (map[category]) {
+      map[category]++;
     } else {
-      map[post.category] = 1;
+      map[category] = 1;
     }
   });
   return map;
@@ -529,7 +587,10 @@ const filteredBlogPosts = computed(() => {
   let posts = [...blogPosts.value];
 
   if (selectedCategory.value !== 'all') {
-    posts = posts.filter(post => post.category === selectedCategory.value);
+    posts = posts.filter(post => {
+      const category = post.category || '未分类';
+      return category === selectedCategory.value;
+    });
   }
 
   return posts.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -562,6 +623,14 @@ watch(selectedCategory, () => {
   currentPage.value = 1;
 });
 
+watch(uploadDialogVisible, (val) => {
+  if (!val) {
+    uploadPreview.value = '';
+    uploadFile.value = null;
+    uploadRef.value?.clearFiles();
+  }
+});
+
 const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('zh-CN', {
     year: 'numeric',
@@ -576,7 +645,7 @@ const showPostDetail = async (post) => {
   postContent.value = '';
 
   try {
-    const response = await fetch(`/api/posts/${post.category}/${post.slug}`);
+    const response = await fetch(`/api/posts/${post.slug}`);
 
     if (!response.ok) {
       throw new Error('无法加载文章内容');
@@ -612,7 +681,7 @@ const handleDelete = async () => {
       }
     );
 
-    const response = await fetch(`/api/posts/${currentPost.value.category}/${currentPost.value.slug}`, {
+    const response = await fetch(`/api/posts/${currentPost.value.slug}`, {
       method: 'DELETE'
     });
 
@@ -636,7 +705,17 @@ const handleDelete = async () => {
 };
 
 const openUploadDialog = () => {
+  uploadCategory.value = '';
   uploadDialogVisible.value = true;
+};
+
+// 分类自动补全
+const queryCategory = (queryString, callback) => {
+  const allCategories = [...new Set(blogPosts.value.map(p => p.category).filter(c => c))];
+  const filtered = queryString
+    ? allCategories.filter(c => c.toLowerCase().includes(queryString.toLowerCase()))
+    : allCategories;
+  callback(filtered.map(c => ({ value: c })));
 };
 
 const openLoginDialog = () => {
@@ -736,12 +815,32 @@ const handleSaveProfile = async () => {
   }
 };
 
-const handleFileChange = (uploadFile_) => {
+const handleFileChange = async (uploadFile_) => {
   uploadFile.value = uploadFile_.raw;
+  // 读取文件内容用于预览
+  const file = uploadFile_.raw;
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      uploadPreview.value = e.target.result;
+    };
+    reader.readAsText(file);
+  }
 };
 
 const handleExceed = () => {
   ElMessage.warning('最多只能上传 1 个文件');
+};
+
+const handleFileRemove = () => {
+  uploadPreview.value = '';
+  uploadFile.value = null;
+};
+
+const openPreview = () => {
+  if (uploadPreview.value) {
+    previewDialogVisible.value = true;
+  }
 };
 
 const handleUpload = async () => {
@@ -753,7 +852,9 @@ const handleUpload = async () => {
   uploading.value = true;
   const formData = new FormData();
   formData.append('file', uploadFile.value);
-  formData.append('category', 'blog');
+  if (uploadCategory.value) {
+    formData.append('category', uploadCategory.value);
+  }
 
   try {
     const response = await fetch('/api/upload', {
@@ -774,7 +875,7 @@ const handleUpload = async () => {
         const organizeRes = await fetch('/api/ai/organize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ category: 'blog', slug })
+          body: JSON.stringify({ slug })
         });
 
         const organizeResult = await organizeRes.json();
@@ -794,7 +895,6 @@ const handleUpload = async () => {
       }
 
       uploadDialogVisible.value = false;
-      uploadFile.value = null;
 
       const postsRes = await fetch('/api/posts');
       if (postsRes.ok) {
@@ -856,6 +956,60 @@ const handleOrganizeAll = async () => {
     }
   } finally {
     organizing.value = false;
+  }
+};
+
+const triggerAvatarUpload = () => {
+  avatarInputRef.value?.click();
+};
+
+const handleAvatarChange = async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  // 验证文件类型
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    ElMessage.error('只支持 JPG、PNG、GIF、WebP 格式的图片');
+    return;
+  }
+
+  // 验证文件大小 (2MB)
+  if (file.size > 2 * 1024 * 1024) {
+    ElMessage.error('头像图片不能超过 2MB');
+    return;
+  }
+
+  avatarUploading.value = true;
+
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  try {
+    const response = await fetch('/api/avatar', {
+      method: 'POST',
+      body: formData
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      ElMessage.success('头像更换成功');
+      // 刷新配置数据以更新头像
+      const configRes = await fetch('/api/config');
+      if (configRes.ok) {
+        configData.value = await configRes.json();
+      }
+    } else {
+      ElMessage.error(result.error || '头像上传失败');
+    }
+  } catch (error) {
+    console.error('头像上传失败:', error);
+    ElMessage.error('头像上传失败，请重试');
+  } finally {
+    avatarUploading.value = false;
+    // 清空 input 值，以便下次选择相同文件时能触发 change 事件
+    event.target.value = '';
   }
 };
 
@@ -922,6 +1076,39 @@ onMounted(async () => {
 
 .avatar:hover {
   transform: scale(1.05);
+}
+
+.avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.avatar-upload-btn {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.avatar-wrapper:hover .avatar-upload-btn {
+  opacity: 1;
+}
+
+.avatar-upload-btn:hover {
+  transform: scale(1.1);
+  background: linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%);
 }
 
 .profile-info {
@@ -1483,6 +1670,40 @@ onMounted(async () => {
   padding: 1rem 0;
 }
 
+.upload-form :deep(.el-collapse) {
+  border: none;
+  margin-bottom: 1rem;
+}
+
+.upload-form :deep(.el-collapse-item__header) {
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 0 1rem;
+  font-weight: 500;
+  color: #606266;
+}
+
+.upload-form :deep(.el-collapse-item__wrap) {
+  border: none;
+  background: transparent;
+}
+
+.upload-form :deep(.el-collapse-item__content) {
+  padding: 1rem 0;
+}
+
+.upload-form :deep(.el-collapse-item__arrow) {
+  color: #606266;
+}
+
+.category-input {
+  width: 100%;
+}
+
+.category-input :deep(.el-input__wrapper) {
+  border-radius: 10px;
+}
+
 .form-tip {
   font-size: 0.85rem;
   color: #9ca3af;
@@ -1543,6 +1764,119 @@ onMounted(async () => {
   font-size: 1rem;
   font-weight: 500;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+/* 预览对话框 */
+.preview-dialog {
+  margin-top: 2vh;
+}
+
+.preview-dialog-content {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background: #fff;
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #4a4a68;
+}
+
+.preview-dialog-content :deep(h1) {
+  font-size: 1.75rem;
+  margin: 0 0 1.25rem;
+  color: #1a1a2e;
+  font-weight: 600;
+}
+
+.preview-dialog-content :deep(h2) {
+  font-size: 1.4rem;
+  margin: 1.5rem 0 1rem;
+  color: #1a1a2e;
+  font-weight: 600;
+}
+
+.preview-dialog-content :deep(h3) {
+  font-size: 1.2rem;
+  margin: 1.25rem 0 0.75rem;
+  color: #1a1a2e;
+  font-weight: 600;
+}
+
+.preview-dialog-content :deep(p) {
+  margin: 1rem 0;
+}
+
+.preview-dialog-content :deep(code) {
+  background: #f4f3ec;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.95em;
+  color: #aa3bff;
+}
+
+.preview-dialog-content :deep(pre) {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 1.25rem;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+}
+
+.preview-dialog-content :deep(pre code) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.preview-dialog-content :deep(blockquote) {
+  margin: 1.25rem 0;
+  padding: 0.75rem 1.25rem;
+  border-left: 4px solid #667eea;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 0 8px 8px 0;
+  color: #606266;
+  font-style: italic;
+}
+
+.preview-dialog-content :deep(ul),
+.preview-dialog-content :deep(ol) {
+  margin: 1rem 0;
+  padding-left: 2rem;
+}
+
+.preview-dialog-content :deep(li) {
+  margin: 0.5rem 0;
+  line-height: 1.7;
+}
+
+.preview-dialog-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 1rem 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.preview-dialog-content :deep(hr) {
+  border: none;
+  height: 2px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin: 2rem 0;
+  border-radius: 1px;
+}
+
+.preview-dialog-content :deep(a) {
+  color: #667eea;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.preview-dialog-content :deep(a:hover) {
+  border-bottom-color: #667eea;
 }
 
 /* 过渡动画 */

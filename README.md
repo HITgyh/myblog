@@ -19,7 +19,7 @@
 -  文章删除功能（移至回收站）
 -  AI 自动整理文章（打标签、智能归类）
 
-![博客截图](./images/blog-screenshot.png)
+
 
 ##  项目结构
 
@@ -46,11 +46,10 @@ myblog/
 │   │   ├── scanPosts.js   # 手动维护博客索引脚本
 │   │   └── aiService.js   # AI 服务模块（调用 MiniMax API）
 │   ├── data/              # 数据目录
+│   │   ├── avatars/       # 用户头像存储目录
 │   │   ├── blogIndex.json # 博客索引文件（自动生成）
 │   │   └── config.json    # 用户配置文件
-│   ├── posts/             # 博客文章目录
-│   │   ├── vue/           # Vue 相关文章
-│   │   └── leetcode/      # LeetCode 题解
+│   ├── posts/             # 博客文章目录（扁平结构）
 │   ├── trash/             # 回收站（删除的文章）
 │   └── package.json       # 后端依赖配置
 │
@@ -145,7 +144,7 @@ npm run dev
 
 ### AI 整理功能
 - **自动打标签**：AI 分析文章内容，提取 3-5 个关键词作为标签
-- **智能归类**：AI 分析文章主题，建议最合适的分类
+- **自动生成描述**：AI 分析文章内容，生成 20-50 字的中文简介
 - **批量整理**：一键整理所有文章
 
 > 注意：使用 AI 功能需要配置 MiniMax API-key。若未配置或配置错误，前端会提示参照本文档进行配置。
@@ -165,11 +164,12 @@ npm run dev
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | GET | `/api/posts` | 获取博客列表 |
-| GET | `/api/posts/:category/:slug` | 获取指定文章内容 |
-| DELETE | `/api/posts/:category/:slug` | 删除文章（移至回收站） |
+| GET | `/api/posts/:slug` | 获取指定文章内容 |
+| DELETE | `/api/posts/:slug` | 删除文章（移至回收站） |
 | GET | `/api/config` | 获取用户配置信息 |
 | PUT | `/api/config` | 更新用户配置信息 |
 | POST | `/api/verify-password` | 验证管理员密码 |
+| GET | `/avatar` | 获取头像图片 |
 | POST | `/api/avatar` | 上传头像 |
 | GET | `/api/maintain` | 手动维护博客索引 |
 | POST | `/api/upload` | 上传 Markdown 文件 |
@@ -181,13 +181,13 @@ npm run dev
 ### 方式一：前端上传（推荐）
 
 1. 点击右上角「上传文章」按钮
-2. 选择分类（可输入新分类名创建）
-3. 拖拽或选择 Markdown 文件
-4. 点击上传（上传后自动进行 AI 整理）
+2. 选择或拖拽 Markdown 文件
+3. 可选择输入文章分类（可选）
+4. 点击上传（上传后自动进行 AI 整理生成标签和描述）
 
 ### 方式二：手动添加
 
-将 Markdown 文件放入 `server/posts/{category}/` 目录，然后手动访问 `/api/maintain` 触发索引更新。
+将 Markdown 文件放入 `server/posts/` 目录，然后手动访问 `/api/maintain` 触发索引更新。
 
 ##  配置说明
 
