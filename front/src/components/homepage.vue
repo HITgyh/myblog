@@ -45,28 +45,30 @@
             </a>
           </div>
         </div>
-        <el-button v-if="!isAdmin" class="login-btn" @click="openLoginDialog">
-          <el-icon><UserFilled /></el-icon>
-          管理员登录
-        </el-button>
-        <template v-if="isAdmin">
-          <el-button class="logout-btn" @click="handleLogout">
-            <el-icon><SwitchButton /></el-icon>
-            退出登录
+        <div class="admin-buttons">
+          <el-button v-if="!isAdmin" class="login-btn" @click="openLoginDialog">
+            <el-icon><UserFilled /></el-icon>
+            管理员登录
           </el-button>
-          <el-tooltip content="上传 Markdown 文章" placement="bottom">
-            <el-button type="primary" class="upload-btn" @click="openUploadDialog">
-              <el-icon><Upload /></el-icon>
-              上传文章
+          <template v-if="isAdmin">
+            <el-tooltip content="上传 Markdown 文章" placement="bottom">
+              <el-button type="primary" class="upload-btn" @click="openUploadDialog">
+                <el-icon><Upload /></el-icon>
+                上传文章
+              </el-button>
+            </el-tooltip>
+            <el-tooltip content="AI 自动分析文章并打标签归类" placement="bottom">
+              <el-button type="warning" class="organize-btn" :loading="organizing" @click="handleOrganizeAll">
+                <el-icon><MagicStick /></el-icon>
+                AI 整理
+              </el-button>
+            </el-tooltip>
+            <el-button class="logout-btn" @click="handleLogout">
+              <el-icon><SwitchButton /></el-icon>
+              退出登录
             </el-button>
-          </el-tooltip>
-          <el-tooltip content="AI 自动分析文章并打标签归类" placement="bottom">
-            <el-button type="warning" class="organize-btn" :loading="organizing" @click="handleOrganizeAll">
-              <el-icon><MagicStick /></el-icon>
-              AI 整理
-            </el-button>
-          </el-tooltip>
-        </template>
+          </template>
+        </div>
       </div>
     </header>
 
@@ -1082,6 +1084,7 @@ onMounted(async () => {
 .admin-buttons {
   display: flex;
   gap: 0.75rem;
+  margin-left: auto;
 }
 
 /* 主内容区域 */
