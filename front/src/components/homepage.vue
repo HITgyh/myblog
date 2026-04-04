@@ -125,14 +125,13 @@
               <el-icon><Reading /></el-icon>
               {{ selectedCategory === 'all' ? '全部文章' : categoryNames[selectedCategory] || selectedCategory }}
             </h2>
-            <span class="post-count">共 {{ filteredBlogPosts.length }} 篇</span>
             <div class="search-wrapper">
               <el-input
                 v-model="searchQuery"
                 placeholder="搜索..."
                 clearable
-                size="small"
-                style="width: 160px;"
+                size="default"
+                style="width: 220px;"
               >
                 <template #prefix>
                   <el-icon><Search /></el-icon>
