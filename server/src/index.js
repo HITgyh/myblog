@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import maintainBlogIndex from './scanPosts.js';
-import { analyzePost, batchAnalyze, ApiKeyError } from './aiService.js';
+import { analyzePost, ApiKeyError } from './aiService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +75,35 @@ app.get('/api/posts/:slug', (req, res) => {
   } catch (error) {
     console.error('读取博客内容失败:', error);
     res.status(500).json({ error: '无法获取博客内容' });
+  }
+});
+
+// 更新文章分类
+app.put('/api/posts/:slug/category', (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { category } = req.body;
+
+    const indexPath = path.join(__dirname, '../data/blogIndex.json');
+    const indexData = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+    const postIndex = indexData.findIndex(p => p.slug === slug);
+
+    if (postIndex === -1) {
+      return res.status(404).json({ error: '文章不存在' });
+    }
+
+    // 更新分类（空字符串表示删除分类）
+    indexData[postIndex].category = category || '';
+    fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), 'utf-8');
+
+    res.json({
+      success: true,
+      message: category ? '分类已更新' : '分类已删除',
+      category: indexData[postIndex].category
+    });
+  } catch (error) {
+    console.error('更新分类失败:', error);
+    res.status(500).json({ error: '更新分类失败' });
   }
 });
 
@@ -380,6 +409,7 @@ app.listen(PORT, () => {
   console.log(`  - GET  /api/posts        - 获取博客清单`);
   console.log(`  - GET  /api/posts/:slug  - 获取博客内容`);
   console.log(`  - DELETE /api/posts/:slug - 删除博客文章`);
+  console.log(`  - PUT  /api/posts/:slug/category - 更新文章分类`);
   console.log(`  - GET  /api/config       - 获取配置信息`);
   console.log(`  - PUT  /api/config        - 更新配置信息`);
   console.log(`  - POST /api/verify-password - 验证管理员密码`);

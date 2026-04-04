@@ -126,6 +126,19 @@
               {{ selectedCategory === 'all' ? '全部文章' : categoryNames[selectedCategory] || selectedCategory }}
             </h2>
             <span class="post-count">共 {{ filteredBlogPosts.length }} 篇</span>
+            <div class="search-wrapper">
+              <el-input
+                v-model="searchQuery"
+                placeholder="搜索..."
+                clearable
+                size="small"
+                style="width: 160px;"
+              >
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+            </div>
           </div>
 
           <!-- 骨架屏加载 -->
@@ -202,7 +215,7 @@
         </template>
 
         <!-- 详情视图 -->
-        <template v-else>
+        <template v-else-if="currentPost">
           <transition name="detail" appear>
             <article class="post-detail">
               <header class="post-detail-header">
@@ -221,6 +234,37 @@
                   </el-button>
                 </div>
                 <div class="post-meta">
+                  <div class="category-wrapper">
+                    <el-select
+                      v-if="isEditingCategory"
+                      v-model="editCategory"
+                      placeholder="选择或输入分类"
+                      filterable
+                      allow-create
+                      default-first-option
+                      clearable
+                      size="small"
+                      @change="handleCategoryChange"
+                      @blur="cancelEditCategory"
+                      ref="categorySelectRef"
+                    >
+                      <el-option
+                        v-for="cat in allCategories"
+                        :key="cat"
+                        :label="cat || '未分类'"
+                        :value="cat"
+                      />
+                    </el-select>
+                    <span
+                      v-else
+                      class="post-category-display"
+                      :class="{ 'is-editable': true }"
+                      @click="startEditCategory"
+                    >
+                      {{ currentPost?.category || '未分类' }}
+                      <span class="edit-hint">点击修改</span>
+                    </span>
+                  </div>
                   <span class="post-date">
                     <el-icon><Calendar /></el-icon>
                     {{ formatDate(currentPost.date) }}
@@ -418,7 +462,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, watch, markRaw } from 'vue';
+import { computed, ref, onMounted, watch, markRaw, nextTick } from 'vue';
 import { marked } from 'marked';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -451,18 +495,24 @@ import {
   SwitchButton,
   Edit,
   UserFilled,
-  Camera
+  Camera,
+  Search
 } from '@element-plus/icons-vue';
 
 const configData = ref(null);
 const blogPosts = ref([]);
 const selectedCategory = ref('all');
+const searchQuery = ref('');
 const currentPage = ref(1);
-const postsPerPage = 8;
+const postsPerPage = 7;
 const currentPost = ref(null);
 const postContent = ref('');
 const loading = ref(false);
 const uploadDialogVisible = ref(false);
+const isEditingCategory = ref(false);
+const editCategory = ref('');
+const allCategories = ref([]);
+const categorySelectRef = ref(null);
 const uploadFile = ref(null);
 const uploading = ref(false);
 const uploadCategory = ref('');
@@ -537,11 +587,11 @@ const getCategoryIcon = (category) => {
 // 获取分类标签类型
 const getCategoryType = (category) => {
   const types = {
-    leetcode: '',
+    leetcode: 'primary',
     vue: 'success',
     algorithm: 'warning',
     frontend: 'info',
-    backend: '',
+    backend: 'primary',
     database: 'danger',
     devops: 'warning',
     other: 'info'
@@ -552,8 +602,9 @@ const getCategoryType = (category) => {
 // 获取标签类型（根据标签名分配不同颜色）
 const getTagType = (tag) => {
   const tagLower = tag.toLowerCase();
-  if (tagLower.includes('array') || tagLower.includes('list')) return '';
-  if (tagLower.includes('linked') || tagLower.includes('list')) return 'success';
+  if (tagLower.includes('array')) return '';
+  if (tagLower.includes('linked')) return 'success';
+  if (tagLower.includes('list')) return 'primary';
   if (tagLower.includes('tree') || tagLower.includes('binary')) return 'warning';
   if (tagLower.includes('dynamic') || tagLower.includes('dp')) return 'danger';
   if (tagLower.includes('string')) return 'info';
@@ -579,6 +630,18 @@ const categoryMap = computed(() => {
 const filteredBlogPosts = computed(() => {
   let posts = [...blogPosts.value];
 
+  // 搜索过滤
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase().trim();
+    posts = posts.filter(post => {
+      const titleMatch = post.title?.toLowerCase().includes(query);
+      const descMatch = post.description?.toLowerCase().includes(query);
+      const tagMatch = post.tags?.some(tag => tag.toLowerCase().includes(query));
+      return titleMatch || descMatch || tagMatch;
+    });
+  }
+
+  // 分类过滤
   if (selectedCategory.value !== 'all') {
     posts = posts.filter(post => {
       const category = post.category || '未分类';
@@ -630,6 +693,59 @@ const formatDate = (dateString) => {
     month: 'long',
     day: 'numeric'
   });
+};
+
+// 获取所有分类
+const loadAllCategories = async () => {
+  try {
+    const res = await fetch('/api/posts');
+    const posts = await res.json();
+    const categories = new Set();
+    posts.forEach(post => {
+      if (post.category) {
+        categories.add(post.category);
+      }
+    });
+    allCategories.value = Array.from(categories).sort();
+  } catch (err) {
+    console.error('获取分类失败:', err);
+  }
+};
+
+const startEditCategory = () => {
+  editCategory.value = currentPost.value?.category || '';
+  isEditingCategory.value = true;
+  nextTick(() => {
+    categorySelectRef.value?.focus();
+  });
+};
+
+const handleCategoryChange = async (value) => {
+  if (!currentPost.value) return;
+  try {
+    const res = await fetch(`/api/posts/${currentPost.value.slug}/category`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category: value })
+    });
+
+    if (!res.ok) {
+      throw new Error('更新分类失败');
+    }
+
+    const result = await res.json();
+    currentPost.value.category = result.category;
+    isEditingCategory.value = false;
+    ElMessage.success(result.message);
+  } catch (err) {
+    console.error('更新分类失败:', err);
+    ElMessage.error('更新分类失败');
+  }
+};
+
+const cancelEditCategory = () => {
+  isEditingCategory.value = false;
+  editCategory.value = '';
 };
 
 const showPostDetail = async (post) => {
@@ -893,6 +1009,7 @@ const handleUpload = async () => {
       if (postsRes.ok) {
         blogPosts.value = await postsRes.json();
       }
+      loadAllCategories();
     } else {
       ElMessage.error(result.error || '上传失败');
     }
@@ -978,6 +1095,8 @@ onMounted(async () => {
     if (postsRes.ok) {
       blogPosts.value = await postsRes.json();
     }
+
+    loadAllCategories();
   } catch (error) {
     console.error('加载数据失败:', error);
     configData.value = { name: '加载失败', bio: '无法加载个人信息' };
@@ -1204,7 +1323,8 @@ onMounted(async () => {
   gap: 2rem;
   max-width: 1400px;
   margin: 2rem auto;
-  padding: 0 2rem;
+  padding: 0 2rem 2rem;
+  min-height: calc(100vh - 200px);
 }
 
 /* 侧边栏 */
@@ -1275,6 +1395,8 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .section-header h2 {
@@ -1285,6 +1407,24 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.search-wrapper {
+  display: inline-flex;
+}
+
+.search-wrapper :deep(.el-input__wrapper) {
+  border-radius: 12px;
+  padding: 4px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e8e8e8;
+  transition: all 0.3s ease;
+}
+
+.search-wrapper :deep(.el-input__wrapper:hover),
+.search-wrapper :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  border-color: #667eea;
 }
 
 .post-count {
@@ -1403,6 +1543,7 @@ onMounted(async () => {
   padding: 1.5rem 0;
 }
 
+/* 到底了 */
 /* 详情页 */
 .post-detail {
   background: white;
@@ -1467,6 +1608,46 @@ onMounted(async () => {
 .category-tag {
   text-transform: capitalize;
   letter-spacing: 0.5px;
+}
+
+.post-category-display {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.2rem 0.6rem;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.post-category-display.is-editable:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.edit-hint {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.category-wrapper {
+  display: inline-flex;
+  align-items: center;
+}
+
+.category-wrapper :deep(.el-select) {
+  width: 130px;
+}
+
+.category-wrapper :deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.category-wrapper :deep(.el-input__inner) {
+  color: white;
 }
 
 .post-detail-header .post-date {

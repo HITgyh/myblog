@@ -1,5 +1,61 @@
 [
   {
+    "slug": "MinimumSizeSubarraySum",
+    "title": "Minimum Size Subarray Sum",
+    "description": "使用滑动窗口算法在C++中求解LeetCode 209题最小子数组长度，返回满足条件的最小子数组长度。",
+    "date": "2026-04-04",
+    "tags": [
+      "Sliding Window",
+      "LeetCode",
+      "C++",
+      "Array",
+      "Algorithm"
+    ],
+    "category": "leetcode"
+  },
+  {
+    "slug": "RemoveElement",
+    "title": "Remove Element",
+    "description": "通过双指针法在O(n)时间内原地移除数组中指定值的元素，并提供C++与JavaScript实现示例。",
+    "date": "2026-04-04",
+    "tags": [
+      "LeetCode",
+      "Remove Element",
+      "Two Pointers",
+      "C++",
+      "JavaScript"
+    ],
+    "category": "leetcode"
+  },
+  {
+    "slug": "SquaresOfaSortedArray",
+    "title": "Squares of a Sorted Array",
+    "description": "讲解已排序数组的平方并保持非递减顺序，提供C++与JavaScript实现示例。",
+    "date": "2026-04-04",
+    "tags": [
+      "LeetCode",
+      "Array",
+      "Two Pointers",
+      "Sorting",
+      "Square"
+    ],
+    "category": "leetcode"
+  },
+  {
+    "slug": "ValidAnagram",
+    "title": "242.Valid Angaram",
+    "description": "讲解如何判断两个字符串是否为变位词，提供排序和计数两种实现方式。",
+    "date": "2026-04-04",
+    "tags": [
+      "JavaScript",
+      "Anagram",
+      "String",
+      "Algorithm",
+      "LeetCode"
+    ],
+    "category": "leetcode"
+  },
+  {
     "slug": "BinarySearch",
     "title": "Binary Search",
     "description": "介绍二分查找算法，解决在已排序数组中查找目标值的问题，提供C++和JavaScript实现。",
@@ -39,7 +95,7 @@
       "JavaScript",
       "Set"
     ],
-    "category": "leetcode"
+    "category": ""
   },
   {
     "slug": "SpiralMatrixII",
@@ -52,6 +108,7 @@
       "C++",
       "Algorithm",
       "Matrix"
-    ]
+    ],
+    "category": "leetcode"
   }
 ]

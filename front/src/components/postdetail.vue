@@ -17,14 +17,44 @@
         <button @click="goBack" class="back-button">
           ← 返回
         </button>
-        
+
         <div class="post-meta">
-          <span class="post-category">{{ postData?.category || '未分类' }}</span>
+          <div class="category-wrapper">
+            <el-select
+              v-if="isEditingCategory"
+              v-model="editCategory"
+              placeholder="选择或输入分类"
+              filterable
+              allow-create
+              default-first-option
+              clearable
+              size="small"
+              @change="handleCategoryChange"
+              @blur="cancelEditCategory"
+              ref="categorySelectRef"
+            >
+              <el-option
+                v-for="cat in allCategories"
+                :key="cat"
+                :label="cat || '未分类'"
+                :value="cat"
+              />
+            </el-select>
+            <span
+              v-else
+              class="post-category"
+              :class="{ 'is-editable': true }"
+              @click="startEditCategory"
+            >
+              {{ postData?.category || '未分类' }}
+              <span class="edit-hint">点击修改</span>
+            </span>
+          </div>
           <span class="post-date">{{ formatDate(postData?.date) }}</span>
         </div>
-        
+
         <h1 class="post-title">{{ postData?.title }}</h1>
-        
+
         <div class="post-tags">
           <span v-for="tag in postData?.tags" :key="tag" class="tag">
             {{ tag }}
@@ -38,9 +68,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { marked } from 'marked'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 
@@ -55,6 +86,11 @@ const loading = ref(true)
 const error = ref(null)
 const postContent = ref('')
 const postData = ref(null)
+const isAdmin = ref(false)
+const isEditingCategory = ref(false)
+const editCategory = ref('')
+const allCategories = ref([])
+const categorySelectRef = ref(null)
 
 marked.setOptions({
   breaks: true,
@@ -78,15 +114,62 @@ const loadPostData = async () => {
     const posts = await postRes.json()
     postData.value = posts.find(post => post.slug === props.slug)
 
+    // 获取所有已存在的分类
+    const categories = new Set()
+    posts.forEach(post => {
+      if (post.category) {
+        categories.add(post.category)
+      }
+    })
+    allCategories.value = Array.from(categories).sort()
+
     const content = await contentRes.text()
     postContent.value = marked.parse(content)
-    
+
   } catch (err) {
     console.error('加载文章失败:', err)
     error.value = err.message || '文章不存在或加载失败'
   } finally {
     loading.value = false
   }
+}
+
+const startEditCategory = () => {
+  isAdmin.value = localStorage.getItem('isAdmin') === 'true'
+  if (!isAdmin.value) return
+
+  editCategory.value = postData.value?.category || ''
+  isEditingCategory.value = true
+  nextTick(() => {
+    categorySelectRef.value?.focus()
+  })
+}
+
+const handleCategoryChange = async (value) => {
+  try {
+    const res = await fetch(`/api/posts/${props.slug}/category`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category: value })
+    })
+
+    if (!res.ok) {
+      throw new Error('更新分类失败')
+    }
+
+    const result = await res.json()
+    postData.value.category = result.category
+    isEditingCategory.value = false
+    ElMessage.success(result.message)
+  } catch (err) {
+    console.error('更新分类失败:', err)
+    ElMessage.error('更新分类失败')
+  }
+}
+
+const cancelEditCategory = () => {
+  isEditingCategory.value = false
+  editCategory.value = ''
 }
 
 const formatDate = (dateString) => {
@@ -195,6 +278,45 @@ onMounted(() => {
   padding: 0.25rem 0.75rem;
   border-radius: 15px;
   font-weight: 500;
+}
+
+.post-category.is-editable {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.post-category.is-editable:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.edit-hint {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-left: 0.5rem;
+}
+
+.category-wrapper {
+  display: inline-flex;
+  align-items: center;
+}
+
+.category-wrapper :deep(.el-select) {
+  width: 140px;
+}
+
+.category-wrapper :deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.category-wrapper :deep(.el-input__inner) {
+  color: white;
+}
+
+.category-wrapper :deep(.el-input__wrapper:hover),
+.category-wrapper :deep(.el-input__wrapper.is-focus) {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .post-title {
