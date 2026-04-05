@@ -126,9 +126,25 @@ app.delete('/api/posts/:slug', (req, res) => {
     // 移动文件到回收站
     fs.renameSync(sourcePath, destPath);
 
-    // 更新 blogIndex.json
+    // 保存被删除文章的元数据到 trashIndex.json
     const indexPath = path.join(__dirname, '../data/blogIndex.json');
     const indexData = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+    const deletedPost = indexData.find(post => post.slug === slug);
+
+    if (deletedPost) {
+      const trashIndexPath = path.join(__dirname, '../data/trashIndex.json');
+      let trashIndex = [];
+      if (fs.existsSync(trashIndexPath)) {
+        trashIndex = JSON.parse(fs.readFileSync(trashIndexPath, 'utf-8'));
+      }
+      // 添加删除时间和原始数据
+      deletedPost.deletedAt = new Date().toISOString();
+      deletedPost.originalPath = `../posts/${slug}.md`;
+      trashIndex.push(deletedPost);
+      fs.writeFileSync(trashIndexPath, JSON.stringify(trashIndex, null, 2), 'utf-8');
+    }
+
+    // 更新 blogIndex.json
     const updatedIndex = indexData.filter(post => post.slug !== slug);
     fs.writeFileSync(indexPath, JSON.stringify(updatedIndex, null, 2), 'utf-8');
 
@@ -140,6 +156,104 @@ app.delete('/api/posts/:slug', (req, res) => {
   } catch (error) {
     console.error('删除文章失败:', error);
     res.status(500).json({ error: '删除文章失败' });
+  }
+});
+
+// 获取回收站列表（7天内）
+app.get('/api/trash', (req, res) => {
+  try {
+    const trashIndexPath = path.join(__dirname, '../data/trashIndex.json');
+    if (!fs.existsSync(trashIndexPath)) {
+      return res.json([]);
+    }
+
+    const trashIndex = JSON.parse(fs.readFileSync(trashIndexPath, 'utf-8'));
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // 过滤7天内的文章，并检查文件是否还存在
+    const validTrash = trashIndex.filter(post => {
+      const deletedAt = new Date(post.deletedAt);
+      const isWithin7Days = deletedAt >= sevenDaysAgo;
+      const fileExists = fs.existsSync(path.join(__dirname, `../trash/${post.slug}.md`));
+      return isWithin7Days && fileExists;
+    });
+
+    res.json(validTrash);
+  } catch (error) {
+    console.error('获取回收站失败:', error);
+    res.status(500).json({ error: '获取回收站失败' });
+  }
+});
+
+// 恢复文章
+app.post('/api/trash/:slug/restore', (req, res) => {
+  try {
+    const { slug } = req.params;
+    const trashIndexPath = path.join(__dirname, '../data/trashIndex.json');
+    const trashFilePath = path.join(__dirname, `../trash/${slug}.md`);
+    const postsDir = path.join(__dirname, '../posts');
+    const destPath = path.join(postsDir, `${slug}.md`);
+
+    if (!fs.existsSync(trashFilePath)) {
+      return res.status(404).json({ error: '回收站中不存在此文章' });
+    }
+
+    // 恢复文件
+    fs.renameSync(trashFilePath, destPath);
+
+    // 从 trashIndex 中移除
+    if (fs.existsSync(trashIndexPath)) {
+      let trashIndex = JSON.parse(fs.readFileSync(trashIndexPath, 'utf-8'));
+      const restoredPost = trashIndex.find(post => post.slug === slug);
+      trashIndex = trashIndex.filter(post => post.slug !== slug);
+      fs.writeFileSync(trashIndexPath, JSON.stringify(trashIndex, null, 2), 'utf-8');
+
+      // 恢复到 blogIndex
+      if (restoredPost) {
+        const indexPath = path.join(__dirname, '../data/blogIndex.json');
+        const indexData = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+        const { deletedAt, originalPath, ...postData } = restoredPost;
+        indexData.push(postData);
+        fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), 'utf-8');
+      }
+    }
+
+    res.json({
+      success: true,
+      message: '文章已恢复'
+    });
+  } catch (error) {
+    console.error('恢复文章失败:', error);
+    res.status(500).json({ error: '恢复文章失败' });
+  }
+});
+
+// 永久删除文章
+app.delete('/api/trash/:slug', (req, res) => {
+  try {
+    const { slug } = req.params;
+    const trashFilePath = path.join(__dirname, `../trash/${slug}.md`);
+
+    if (fs.existsSync(trashFilePath)) {
+      fs.unlinkSync(trashFilePath);
+    }
+
+    // 从 trashIndex 中移除
+    const trashIndexPath = path.join(__dirname, '../data/trashIndex.json');
+    if (fs.existsSync(trashIndexPath)) {
+      let trashIndex = JSON.parse(fs.readFileSync(trashIndexPath, 'utf-8'));
+      trashIndex = trashIndex.filter(post => post.slug !== slug);
+      fs.writeFileSync(trashIndexPath, JSON.stringify(trashIndex, null, 2), 'utf-8');
+    }
+
+    res.json({
+      success: true,
+      message: '文章已永久删除'
+    });
+  } catch (error) {
+    console.error('永久删除失败:', error);
+    res.status(500).json({ error: '永久删除失败' });
   }
 });
 
@@ -268,6 +382,7 @@ app.post('/api/upload', upload.single('file'), multerErrorHandler, (req, res) =>
       fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), 'utf-8');
     }
 
+    // 立即返回，不等待 AI 整理
     res.json({
       success: true,
       message: '文件上传成功',
@@ -276,7 +391,30 @@ app.post('/api/upload', upload.single('file'), multerErrorHandler, (req, res) =>
         slug,
         category,
         path: filePath
-      }
+      },
+      processing: true // 标记需要 AI 处理
+    });
+
+    // 后台异步处理 AI 整理（不阻塞响应）
+    setImmediate(() => {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const titleMatch = content.match(/^#\s+(.+)/m);
+      const postTitle = titleMatch ? titleMatch[1].replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') : slug;
+
+      analyzePost(postTitle, content).then((analysis) => {
+        // 更新索引中的 tags 和 description
+        const idxPath = path.join(__dirname, '../data/blogIndex.json');
+        const idxData = JSON.parse(fs.readFileSync(idxPath, 'utf-8'));
+        const postIdx = idxData.findIndex(p => p.slug === slug);
+        if (postIdx !== -1) {
+          idxData[postIdx].tags = analysis.tags || [];
+          idxData[postIdx].description = analysis.description || '';
+          fs.writeFileSync(idxPath, JSON.stringify(idxData, null, 2), 'utf-8');
+        }
+        console.log(`AI 整理完成: ${slug}`);
+      }).catch((error) => {
+        console.error(`AI 整理失败: ${slug}`, error);
+      });
     });
   } catch (error) {
     console.error('上传文件失败:', error);
@@ -418,4 +556,7 @@ app.listen(PORT, () => {
   console.log(`  - GET  /api/maintain     - 手动维护博客索引`);
   console.log(`  - POST /api/upload       - 上传 Markdown 文件`);
   console.log(`  - POST /api/ai/organize  - AI 整理单篇文章`);
+  console.log(`  - GET  /api/trash        - 获取回收站列表`);
+  console.log(`  - POST /api/trash/:slug/restore - 恢复文章`);
+  console.log(`  - DELETE /api/trash/:slug - 永久删除文章`);
 });

@@ -86,7 +86,7 @@
       <aside class="category-sidebar">
         <div class="sidebar-header">
           <el-icon><Folder /></el-icon>
-          <span>分类</span>
+          <span>文章</span>
         </div>
         <el-scrollbar height="calc(100vh - 280px)">
           <div class="category-list">
@@ -99,6 +99,21 @@
               <span class="category-name">全部文章</span>
               <el-tag size="small" type="info">{{ blogPosts.length }}</el-tag>
             </div>
+
+            <div class="trash-section">
+              <div
+                class="category-item"
+                :class="{ active: selectedCategory === '__trash__' }"
+                @click="selectCategory('__trash__')"
+              >
+                <el-icon><Delete /></el-icon>
+                <span class="category-name">垃圾箱</span>
+                <el-tag v-if="trashPosts.length > 0" size="small" type="danger">{{ trashPosts.length }}</el-tag>
+              </div>
+            </div>
+
+            <div class="category-section-title">分类</div>
+
             <div
               v-for="(count, category) in categoryMap"
               :key="category"
@@ -123,9 +138,9 @@
           <div class="section-header">
             <h2>
               <el-icon><Reading /></el-icon>
-              {{ selectedCategory === 'all' ? '全部文章' : categoryNames[selectedCategory] || selectedCategory }}
+              {{ selectedCategory === '__trash__' ? '回收站' : (selectedCategory === 'all' ? '全部文章' : categoryNames[selectedCategory] || selectedCategory) }}
             </h2>
-            <div class="search-wrapper">
+            <div class="search-wrapper" v-if="selectedCategory !== '__trash__'">
               <el-input
                 v-model="searchQuery"
                 placeholder="搜索..."
@@ -153,8 +168,8 @@
           </div>
 
           <!-- 空状态 -->
-          <el-empty v-else-if="filteredBlogPosts.length === 0" :description="emptyText">
-            <el-button type="primary" @click="openUploadDialog">
+          <el-empty v-else-if="filteredBlogPosts.length === 0" :description="selectedCategory === '__trash__' ? '回收站是空的' : emptyText">
+            <el-button v-if="selectedCategory !== '__trash__'" type="primary" @click="openUploadDialog">
               <el-icon><Upload /></el-icon>
               上传第一篇文章
             </el-button>
@@ -166,37 +181,58 @@
               v-for="post in paginatedPosts"
               :key="post.slug"
               class="blog-post-card"
-              @click="showPostDetail(post)"
+              :class="{ 'trash-card': selectedCategory === '__trash__' }"
+              @click="selectedCategory === '__trash__' ? null : showPostDetail(post)"
             >
               <div class="card-header">
                 <div class="card-meta">
-                  <el-tag size="small" effect="plain" :type="getCategoryType(post.category)">
-                    <el-icon><component :is="getCategoryIcon(post.category)" /></el-icon>
-                    {{ post.category || '未分类' }}
-                  </el-tag>
-                  <span class="post-date">
-                    <el-icon><Calendar /></el-icon>
-                    {{ formatDate(post.date) }}
-                  </span>
+                  <template v-if="selectedCategory === '__trash__'">
+                    <el-tag size="small" type="info">
+                      <el-icon><Clock /></el-icon>
+                      {{ formatDeletedDate(post.deletedAt) }}
+                    </el-tag>
+                  </template>
+                  <template v-else>
+                    <el-tag size="small" effect="plain" :type="getCategoryType(post.category)">
+                      <el-icon><component :is="getCategoryIcon(post.category)" /></el-icon>
+                      {{ post.category || '未分类' }}
+                    </el-tag>
+                    <span class="post-date">
+                      <el-icon><Calendar /></el-icon>
+                      {{ formatDate(post.date) }}
+                    </span>
+                  </template>
                 </div>
                 <h3 class="post-title">{{ post.title }}</h3>
               </div>
               <p class="post-excerpt">{{ post.description }}</p>
               <div class="card-footer">
-                <div class="post-tags">
-                  <el-tag
-                    v-for="tag in post.tags.slice(0, 3)"
-                    :key="tag"
-                    size="small"
-                    effect="light"
-                  >
-                    {{ tag }}
-                  </el-tag>
-                </div>
-                <span class="read-more">
-                  阅读全文
-                  <el-icon><ArrowRight /></el-icon>
-                </span>
+                <template v-if="selectedCategory === '__trash__'">
+                  <el-button type="success" size="small" @click.stop="handleRestore(post.slug)">
+                    <el-icon><RefreshRight /></el-icon>
+                    恢复
+                  </el-button>
+                  <el-button type="danger" size="small" @click.stop="handlePermanentDelete(post.slug)">
+                    <el-icon><Delete /></el-icon>
+                    永久删除
+                  </el-button>
+                </template>
+                <template v-else>
+                  <div class="post-tags">
+                    <el-tag
+                      v-for="tag in post.tags.slice(0, 3)"
+                      :key="tag"
+                      size="small"
+                      effect="light"
+                    >
+                      {{ tag }}
+                    </el-tag>
+                  </div>
+                  <span class="read-more">
+                    阅读全文
+                    <el-icon><ArrowRight /></el-icon>
+                  </span>
+                </template>
               </div>
             </article>
           </transition-group>
@@ -480,6 +516,8 @@ import {
   Star,
   Grid,
   Link,
+  Clock,
+  RefreshRight,
   Box,
   SetUp,
   Monitor,
@@ -500,6 +538,7 @@ import {
 
 const configData = ref(null);
 const blogPosts = ref([]);
+const trashPosts = ref([]);
 const selectedCategory = ref('all');
 const searchQuery = ref('');
 const currentPage = ref(1);
@@ -601,7 +640,7 @@ const getCategoryType = (category) => {
 // 获取标签类型（根据标签名分配不同颜色）
 const getTagType = (tag) => {
   const tagLower = tag.toLowerCase();
-  if (tagLower.includes('array')) return '';
+  if (tagLower.includes('array')) return 'info';
   if (tagLower.includes('linked')) return 'success';
   if (tagLower.includes('list')) return 'primary';
   if (tagLower.includes('tree') || tagLower.includes('binary')) return 'warning';
@@ -628,6 +667,11 @@ const categoryMap = computed(() => {
 
 const filteredBlogPosts = computed(() => {
   let posts = [...blogPosts.value];
+
+  // 回收站模式
+  if (selectedCategory.value === '__trash__') {
+    return [...trashPosts.value].sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt));
+  }
 
   // 搜索过滤
   if (searchQuery.value.trim()) {
@@ -694,6 +738,18 @@ const formatDate = (dateString) => {
   });
 };
 
+const formatDeletedDate = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffTime = Math.abs(now - date);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 1) return '今天删除';
+  if (diffDays === 2) return '昨天删除';
+  if (diffDays <= 7) return `${diffDays}天前删除`;
+  return formatDate(dateString);
+};
+
 // 获取所有分类
 const loadAllCategories = async () => {
   try {
@@ -708,6 +764,15 @@ const loadAllCategories = async () => {
     allCategories.value = Array.from(categories).sort();
   } catch (err) {
     console.error('获取分类失败:', err);
+  }
+};
+
+const loadTrashPosts = async () => {
+  try {
+    const res = await fetch('/api/trash');
+    trashPosts.value = await res.json();
+  } catch (err) {
+    console.error('获取回收站失败:', err);
   }
 };
 
@@ -800,6 +865,7 @@ const handleDelete = async () => {
       if (postsRes.ok) {
         blogPosts.value = await postsRes.json();
       }
+      loadTrashPosts();
     } else {
       const result = await response.json();
       ElMessage.error(result.error || '删除失败');
@@ -807,6 +873,75 @@ const handleDelete = async () => {
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error);
+      ElMessage.error('删除失败，请重试');
+    }
+  }
+};
+
+const handleRestore = async (slug) => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要恢复这篇文章吗？',
+      '恢复文章',
+      {
+        confirmButtonText: '恢复',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+
+    const response = await fetch(`/api/trash/${slug}/restore`, {
+      method: 'POST'
+    });
+
+    if (response.ok) {
+      ElMessage.success('文章已恢复');
+      // 重新加载列表
+      const [postsRes, trashRes] = await Promise.all([
+        fetch('/api/posts'),
+        fetch('/api/trash')
+      ]);
+      blogPosts.value = await postsRes.json();
+      trashPosts.value = await trashRes.json();
+      loadAllCategories();
+    } else {
+      const result = await response.json();
+      ElMessage.error(result.error || '恢复失败');
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('恢复失败:', error);
+      ElMessage.error('恢复失败，请重试');
+    }
+  }
+};
+
+const handlePermanentDelete = async (slug) => {
+  try {
+    await ElMessageBox.confirm(
+      '此操作将永久删除文章，确定吗？',
+      '永久删除',
+      {
+        confirmButtonText: '永久删除',
+        cancelButtonText: '取消',
+        type: 'error'
+      }
+    );
+
+    const response = await fetch(`/api/trash/${slug}`, {
+      method: 'DELETE'
+    });
+
+    if (response.ok) {
+      ElMessage.success('文章已永久删除');
+      trashPosts.value = trashPosts.value.filter(p => p.slug !== slug);
+    } else {
+      const result = await response.json();
+      ElMessage.error(result.error || '删除失败');
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('永久删除失败:', error);
       ElMessage.error('删除失败，请重试');
     }
   }
@@ -973,49 +1108,80 @@ const handleUpload = async () => {
     const result = await response.json();
 
     if (response.ok && result.success) {
-      ElMessage.success('上传成功，正在 AI 整理...');
-
       // 获取文件名作为 slug（去掉.md扩展名）
       const slug = uploadFile.value.name.replace('.md', '');
 
-      // 调用 AI 整理接口
-      try {
-        const organizeRes = await fetch('/api/ai/organize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ slug })
-        });
-
-        const organizeResult = await organizeRes.json();
-
-        if (organizeRes.ok && organizeResult.success) {
-          ElMessage.success('AI 整理完成！');
-        } else if (organizeResult.isApiKeyError) {
-          ElMessage.error({
-            message: organizeResult.error + '，请参照 README 文档正确配置 API-key',
-            duration: 5000
-          });
-        } else if (!organizeRes.ok) {
-          ElMessage.error(organizeResult.error || 'AI 整理失败');
-        }
-      } catch (error) {
-        console.error('AI 整理失败:', error);
-      }
-
+      // 关闭上传对话框
       uploadDialogVisible.value = false;
+      uploading.value = false;
 
-      const postsRes = await fetch('/api/posts');
-      if (postsRes.ok) {
-        blogPosts.value = await postsRes.json();
-      }
+      // 显示 AI 处理中提示
+      ElMessage.info({
+        message: '文章已上传，AI 正在后台处理中...',
+        duration: 3000
+      });
+
+      // 刷新分类
       loadAllCategories();
+
+      // 轮询检查 AI 处理是否完成
+      const pollForAIComplete = async () => {
+        const maxAttempts = 30; // 最多等待 30 * 3 = 90 秒
+        let attempts = 0;
+
+        const checkPost = async () => {
+          attempts++;
+          try {
+            const postsRes = await fetch('/api/posts');
+            if (postsRes.ok) {
+              const posts = await postsRes.json();
+              const newPost = posts.find(p => p.slug === slug);
+
+              if (newPost && newPost.tags && newPost.tags.length > 0) {
+                // AI 处理完成，tags 已有内容
+                blogPosts.value = posts;
+                ElMessage.success({
+                  message: 'AI 整理完成！',
+                  duration: 2000
+                });
+                return true;
+              }
+
+              if (attempts >= maxAttempts) {
+                // 超时，显示提示但仍更新列表
+                ElMessage.warning({
+                  message: 'AI 整理超时，文章已添加到列表',
+                  duration: 3000
+                });
+                blogPosts.value = posts;
+                return true;
+              }
+
+              // 继续轮询
+              setTimeout(checkPost, 3000);
+            }
+          } catch (error) {
+            console.error('检查 AI 处理状态失败:', error);
+            if (attempts >= maxAttempts) {
+              return true;
+            }
+            setTimeout(checkPost, 3000);
+          }
+          return false;
+        };
+
+        await checkPost();
+      };
+
+      // 启动轮询
+      pollForAIComplete();
     } else {
       ElMessage.error(result.error || '上传失败');
+      uploading.value = false;
     }
   } catch (error) {
     console.error('上传失败:', error);
     ElMessage.error('上传失败，请重试');
-  } finally {
     uploading.value = false;
   }
 };
@@ -1096,6 +1262,7 @@ onMounted(async () => {
     }
 
     loadAllCategories();
+    loadTrashPosts();
   } catch (error) {
     console.error('加载数据失败:', error);
     configData.value = { name: '加载失败', bio: '无法加载个人信息' };
@@ -1341,35 +1508,68 @@ onMounted(async () => {
 .sidebar-header {
   padding: 1.25rem 1.5rem;
   font-weight: 600;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #1a1a2e;
   border-bottom: 1px solid #f0f0f5;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.sidebar-header .el-icon {
+  font-size: 1.1rem;
 }
 
 .category-list {
-  padding: 1rem;
+  padding: 0.75rem;
+}
+
+.category-section-title {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: #909399;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
 }
 
 .category-item {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.875rem 1rem;
-  margin-bottom: 0.375rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.25rem;
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.3s ease;
   color: #5a5a72;
   font-size: 0.95rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.category-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 0 2px 2px 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .category-item:hover {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
   color: #667eea;
-  padding-left: 1.25rem;
+}
+
+.category-item:hover::before {
+  opacity: 1;
 }
 
 .category-item.active {
@@ -1379,8 +1579,53 @@ onMounted(async () => {
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
+.category-item.active::before {
+  opacity: 0;
+}
+
+.category-item .el-icon {
+  font-size: 1.1rem;
+  transition: transform 0.3s ease;
+}
+
+.category-item:hover .el-icon {
+  transform: scale(1.1);
+}
+
 .category-item .category-name {
   flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.category-item .el-tag {
+  font-size: 0.7rem;
+  padding: 0 6px;
+  height: 20px;
+  line-height: 18px;
+}
+
+.trash-section {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e8e8e8;
+}
+
+.trash-icon-wrapper {
+  position: relative;
+}
+
+.trash-count-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #f56c6c;
+  color: white;
+  font-size: 0.65rem;
+  padding: 2px 5px;
+  border-radius: 10px;
+  font-weight: 600;
 }
 
 /* 博客列表区域 */
@@ -1452,6 +1697,14 @@ onMounted(async () => {
   box-shadow: 0 8px 30px rgba(102, 126, 234, 0.15);
   transform: translateY(-4px);
   border-color: rgba(102, 126, 234, 0.2);
+}
+
+.blog-post-card.trash-card {
+  cursor: default;
+}
+
+.blog-post-card.trash-card:hover {
+  transform: none;
 }
 
 .card-header {
