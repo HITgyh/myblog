@@ -11,9 +11,14 @@ export class BaseProvider {
    * @param {string} config.model - 模型名称
    * @param {Object} [config.extraHeaders] - 额外的请求头
    */
+  /**
+   * 常见的占位符 API Key 值，检查这些值可以提示用户正确配置
+   */
+  static PLACEHOLDER_KEYS = ['your_api_key_here', 'YOUR_API_KEY_HERE', 'sk-your-key-here', 'sk-your-api-key'];
+
   constructor(config) {
-    if (!config.apiKey) {
-      throw new ApiKeyError(`API-key 未配置`);
+    if (!config.apiKey || config.apiKey === 'your_api_key_here') {
+      throw new ApiKeyError(`API-key 未正确配置，请检查 .env 文件中的 API Key 设置`);
     }
     this.apiKey = config.apiKey;
     this.baseURL = config.baseURL.replace(/\/+$/, '');
