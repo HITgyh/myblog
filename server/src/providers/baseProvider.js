@@ -17,7 +17,7 @@ export class BaseProvider {
   static PLACEHOLDER_KEYS = ['your_api_key_here', 'YOUR_API_KEY_HERE', 'sk-your-key-here', 'sk-your-api-key'];
 
   constructor(config) {
-    if (!config.apiKey || config.apiKey === 'your_api_key_here') {
+    if (!config.apiKey || BaseProvider.PLACEHOLDER_KEYS.includes(config.apiKey)) {
       throw new ApiKeyError(`API-key 未正确配置，请检查 .env 文件中的 API Key 设置`);
     }
     this.apiKey = config.apiKey;
